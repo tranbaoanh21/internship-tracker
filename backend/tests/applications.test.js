@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { app } from '../src/app.js';
+import { todayInApplicationTimezone } from '../src/utils/date.js';
 
 const applicationInput = {
   company: 'Saigon Technology',
@@ -9,6 +10,8 @@ const applicationInput = {
   status: 'applied',
   appliedAt: '2026-08-08',
   notes: 'Practice explaining the API data flow.',
+  nextAction: 'Send a concise follow-up email.',
+  followUpAt: '2026-08-20',
 };
 
 async function createApplication(overrides = {}) {
@@ -17,6 +20,12 @@ async function createApplication(overrides = {}) {
     .send({ ...applicationInput, ...overrides });
   expect(response.status).toBe(201);
   return response.body.data;
+}
+
+function dateFromToday(days) {
+  const date = new Date(`${todayInApplicationTimezone()}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 describe('health API', () => {
@@ -46,6 +55,8 @@ describe('applications API', () => {
     const created = await createApplication();
     expect(created).toMatchObject(applicationInput);
     expect(created.id).toEqual(expect.any(String));
+    expect(created.version).toBe(1);
+    expect(created.archivedAt).toBeNull();
 
     const response = await request(app).get(`/api/applications/${created.id}`);
     expect(response.status).toBe(200);
@@ -63,6 +74,8 @@ describe('applications API', () => {
       jobUrl: null,
       appliedAt: null,
       notes: null,
+      nextAction: null,
+      followUpAt: null,
     });
   });
 
@@ -121,6 +134,7 @@ describe('applications API', () => {
     const created = await createApplication();
     const response = await request(app)
       .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`)
       .send({ status: 'interview', notes: 'Technical round scheduled.' });
 
     expect(response.status).toBe(200);
@@ -129,12 +143,16 @@ describe('applications API', () => {
       position: applicationInput.position,
       status: 'interview',
       notes: 'Technical round scheduled.',
+      version: 2,
     });
   });
 
   it('rejects an empty patch', async () => {
     const created = await createApplication();
-    const response = await request(app).patch(`/api/applications/${created.id}`).send({});
+    const response = await request(app)
+      .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`)
+      .send({});
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -143,17 +161,144 @@ describe('applications API', () => {
     const created = await createApplication();
     const response = await request(app)
       .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`)
       .send({ companyName: 'Typo' });
 
     expect(response.status).toBe(400);
     expect(response.body.error.fields.companyName).toBe('This field is not supported.');
   });
 
-  it('deletes an application', async () => {
+  it('requires archive before permanent deletion', async () => {
     const created = await createApplication();
-    expect((await request(app).delete(`/api/applications/${created.id}`)).status).toBe(204);
+    const activeDelete = await request(app)
+      .delete(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`);
+    expect(activeDelete.status).toBe(409);
+    expect(activeDelete.body.error.code).toBe('ARCHIVE_REQUIRED');
+
+    const archived = await request(app)
+      .post(`/api/applications/${created.id}/archive`)
+      .set('If-Match', `"${created.version}"`);
+    expect(archived.status).toBe(200);
+    expect(archived.body.data.archivedAt).toEqual(expect.any(String));
+
+    expect((await request(app)
+      .delete(`/api/applications/${created.id}`)
+      .set('If-Match', `"${archived.body.data.version}"`)).status).toBe(204);
     expect((await request(app).get(`/api/applications/${created.id}`)).status).toBe(404);
   });
+
+  it('records real status changes in history without no-op noise', async () => {
+    const created = await createApplication({ status: 'applied' });
+    const initialHistory = await request(app).get(`/api/applications/${created.id}/history`);
+    expect(initialHistory.status).toBe(200);
+    expect(initialHistory.body.data).toHaveLength(1);
+    expect(initialHistory.body.data[0]).toMatchObject({
+      fromStatus: null,
+      toStatus: 'applied',
+    });
+
+    const changed = await request(app)
+      .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`)
+      .send({ status: 'interview' });
+    const noOp = await request(app)
+      .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${changed.body.data.version}"`)
+      .send({ status: 'interview' });
+    expect(noOp.status).toBe(200);
+
+    const history = await request(app).get(`/api/applications/${created.id}/history`);
+    expect(history.body.data).toHaveLength(2);
+    expect(history.body.data[0]).toMatchObject({
+      fromStatus: 'applied',
+      toStatus: 'interview',
+    });
+  });
+
+  it('archives, filters, and restores an application without losing data', async () => {
+    const created = await createApplication({ company: 'Archive Labs' });
+    const archived = await request(app)
+      .post(`/api/applications/${created.id}/archive`)
+      .set('If-Match', `"${created.version}"`);
+    expect(archived.status).toBe(200);
+
+    const activeList = await request(app).get('/api/applications');
+    expect(activeList.body.data).toHaveLength(0);
+    expect((await request(app).get('/api/applications/stats')).body.data.total).toBe(0);
+
+    const archivedList = await request(app).get('/api/applications').query({ view: 'archived' });
+    expect(archivedList.body.data[0]).toMatchObject({ company: 'Archive Labs' });
+    expect((await request(app).get('/api/applications/stats').query({ view: 'archived' })).body.data.total).toBe(1);
+
+    const restored = await request(app)
+      .post(`/api/applications/${created.id}/restore`)
+      .set('If-Match', `"${archived.body.data.version}"`);
+    expect(restored.status).toBe(200);
+    expect(restored.body.data).toMatchObject({
+      company: 'Archive Labs',
+      archivedAt: null,
+      version: 3,
+    });
+  });
+
+  it('rejects stale mutations and missing preconditions', async () => {
+    const created = await createApplication();
+    const missingHeader = await request(app)
+      .patch(`/api/applications/${created.id}`)
+      .send({ notes: 'No version supplied.' });
+    expect(missingHeader.status).toBe(428);
+    expect(missingHeader.body.error.code).toBe('PRECONDITION_REQUIRED');
+
+    const updated = await request(app)
+      .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`)
+      .send({ notes: 'Fresh update.' });
+    expect(updated.status).toBe(200);
+
+    const stale = await request(app)
+      .patch(`/api/applications/${created.id}`)
+      .set('If-Match', `"${created.version}"`)
+      .send({ notes: 'Stale overwrite.' });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error.code).toBe('STALE_APPLICATION');
+    expect((await request(app).get(`/api/applications/${created.id}`)).body.data.notes).toBe('Fresh update.');
+  });
+
+  it('combines attention, search, status, sorting, and contextual stats', async () => {
+    await createApplication({
+      company: 'Due Soon Labs',
+      status: 'interview',
+      followUpAt: dateFromToday(-1),
+    });
+    const second = await createApplication({
+      company: 'Due Soon Cloud',
+      status: 'applied',
+      followUpAt: dateFromToday(1),
+    });
+    await request(app)
+      .post(`/api/applications/${second.id}/archive`)
+      .set('If-Match', `"${second.version}"`);
+
+    const list = await request(app).get('/api/applications').query({
+      q: 'Due Soon',
+      status: 'interview',
+      attention: 'overdue',
+      sort: 'followUpAt',
+      direction: 'asc',
+    });
+    expect(list.status).toBe(200);
+    expect(list.body.data).toHaveLength(1);
+    expect(list.body.data[0].company).toBe('Due Soon Labs');
+
+    const activeStats = await request(app).get('/api/applications/stats').query({ q: 'Due Soon' });
+    expect(activeStats.body.data).toMatchObject({ interview: 1, applied: 0, total: 1 });
+    const archivedStats = await request(app)
+      .get('/api/applications/stats')
+      .query({ q: 'Due Soon', view: 'archived' });
+    expect(archivedStats.body.data).toMatchObject({ interview: 0, applied: 1, total: 1 });
+  });
+
 
   it('returns consistent errors for invalid and missing ids', async () => {
     const invalid = await request(app).get('/api/applications/not-a-number');

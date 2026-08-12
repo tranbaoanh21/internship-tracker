@@ -20,8 +20,8 @@ describe('ConfirmDialog', () => {
       <ConfirmDialog application={application} deleting={false} error="" onCancel={() => {}} onConfirm={() => {}} />,
     );
 
-    const keepButton = screen.getByRole('button', { name: 'Keep application' });
-    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    const keepButton = screen.getByRole('button', { name: 'Keep archived' });
+    const deleteButton = screen.getByRole('button', { name: 'Delete permanently' });
     const closeButton = screen.getByRole('button', { name: 'Close delete confirmation' });
     expect(keepButton).toHaveFocus();
 
@@ -40,7 +40,7 @@ describe('ConfirmDialog', () => {
     const { rerender } = render(
       <ConfirmDialog application={application} deleting={false} error="" onCancel={() => {}} onConfirm={() => {}} />,
     );
-    const keepButton = screen.getByRole('button', { name: 'Keep application' });
+    const keepButton = screen.getByRole('button', { name: 'Keep archived' });
     expect(keepButton).toHaveFocus();
 
     rerender(<ConfirmDialog application={application} deleting error="" onCancel={() => {}} onConfirm={() => {}} />);

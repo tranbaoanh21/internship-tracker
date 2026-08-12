@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   validateApplicationInput,
   validateId,
+  validateIfMatch,
   validateListQuery,
+  validateStatsQuery,
 } from '../../src/validation/applicationValidation.js';
 
 describe('application validation', () => {
@@ -14,6 +16,8 @@ describe('application validation', () => {
       jobUrl: null,
       appliedAt: null,
       notes: null,
+      nextAction: null,
+      followUpAt: null,
     });
   });
 
@@ -51,7 +55,65 @@ describe('application validation', () => {
       limit: 100,
       status: 'interview',
       q: 'VNG',
+      attention: '',
+      sort: 'updatedAt',
+      direction: 'desc',
+      view: 'active',
     });
+  });
+
+  it('normalizes next-action fields and advanced list filters', () => {
+    expect(validateApplicationInput({
+      company: 'VNG',
+      position: 'Intern',
+      nextAction: '  Email the recruiter  ',
+      followUpAt: '2026-08-20',
+    })).toMatchObject({
+      nextAction: 'Email the recruiter',
+      followUpAt: '2026-08-20',
+    });
+
+    expect(validateListQuery({
+      attention: 'next7',
+      sort: 'followUpAt',
+      direction: 'asc',
+      view: 'archived',
+    })).toMatchObject({
+      attention: 'next7',
+      sort: 'followUpAt',
+      direction: 'asc',
+      view: 'archived',
+    });
+  });
+
+  it('rejects invalid follow-up fields and advanced filters', () => {
+    expect(() => validateApplicationInput({
+      company: 'A',
+      position: 'B',
+      nextAction: 'x'.repeat(241),
+      followUpAt: '2026-02-30',
+    })).toThrowError(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+
+    expect(() => validateListQuery({
+      attention: 'later',
+      sort: 'salary',
+      direction: 'sideways',
+      view: 'all',
+    })).toThrowError(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  });
+
+  it('validates stats context and optimistic-concurrency headers', () => {
+    expect(validateStatsQuery({ q: ' VNG ', view: 'archived' })).toEqual({
+      q: 'VNG',
+      view: 'archived',
+    });
+    expect(validateIfMatch('"42"')).toBe(42);
+    expect(() => validateIfMatch(undefined)).toThrowError(
+      expect.objectContaining({ code: 'PRECONDITION_REQUIRED', status: 428 }),
+    );
+    expect(() => validateIfMatch('42')).toThrowError(
+      expect.objectContaining({ code: 'INVALID_VERSION' }),
+    );
   });
 
   it.each(['1e3', '0x10', '0', '-1'])(

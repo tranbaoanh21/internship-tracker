@@ -37,25 +37,76 @@ async function request(path, options = {}) {
   return body;
 }
 
-export function getApplications({ q, status, page, limit = 20, signal }) {
+export function getApplications({
+  q,
+  status,
+  attention,
+  sort,
+  direction,
+  view,
+  page,
+  limit = 20,
+  signal,
+}) {
   const parameters = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (q) parameters.set('q', q);
   if (status) parameters.set('status', status);
+  if (attention) parameters.set('attention', attention);
+  if (sort && sort !== 'updatedAt') parameters.set('sort', sort);
+  if (direction && direction !== 'desc') parameters.set('direction', direction);
+  if (view && view !== 'active') parameters.set('view', view);
   return request(`/api/applications?${parameters}`, { signal });
 }
 
-export function getStats({ signal } = {}) {
-  return request('/api/applications/stats', { signal });
+export function getStats({ q, view, signal } = {}) {
+  const parameters = new URLSearchParams();
+  if (q) parameters.set('q', q);
+  if (view && view !== 'active') parameters.set('view', view);
+  const query = parameters.toString();
+  return request(`/api/applications/stats${query ? `?${query}` : ''}`, { signal });
+}
+
+export function getApplication(id, { signal } = {}) {
+  return request(`/api/applications/${id}`, { signal });
+}
+
+export function getApplicationHistory(id, { signal } = {}) {
+  return request(`/api/applications/${id}/history`, { signal });
 }
 
 export function createApplication(input) {
   return request('/api/applications', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export function updateApplication(id, input) {
-  return request(`/api/applications/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+function versionHeader(version) {
+  return { 'If-Match': `"${version}"` };
 }
 
-export function deleteApplication(id) {
-  return request(`/api/applications/${id}`, { method: 'DELETE' });
+export function updateApplication(id, input, version) {
+  return request(`/api/applications/${id}`, {
+    method: 'PATCH',
+    headers: versionHeader(version),
+    body: JSON.stringify(input),
+  });
+}
+
+export function archiveApplication(id, version) {
+  return request(`/api/applications/${id}/archive`, {
+    method: 'POST',
+    headers: versionHeader(version),
+  });
+}
+
+export function restoreApplication(id, version) {
+  return request(`/api/applications/${id}/restore`, {
+    method: 'POST',
+    headers: versionHeader(version),
+  });
+}
+
+export function deleteApplication(id, version) {
+  return request(`/api/applications/${id}`, {
+    method: 'DELETE',
+    headers: versionHeader(version),
+  });
 }

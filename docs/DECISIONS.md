@@ -22,7 +22,27 @@ Compose health dependencies order normal startup, but a manual `docker compose r
 
 ## Server-side URL state
 
-Search, status, and page live in URL query parameters. A refresh or shared URL retains the current dashboard view without adding React Router.
+Search, status, attention, sort, lifecycle view, and page live in URL query parameters. A refresh or shared URL retains the current dashboard view without adding React Router.
+
+## Follow-up as the next product slice
+
+`next_action` and `follow_up_at` make the tracker actionable rather than a passive CRUD list. MySQL performs filtering and sorting so pagination remains correct. The backend computes date boundaries in the configured `APP_TIMEZONE`; clients send and receive calendar dates as `YYYY-MM-DD`.
+
+## Transactional status history
+
+Creating or changing an application and recording its status history happen in one database transaction. If either write fails, both are rolled back. No-op edits do not create duplicate history entries, and the initial history row makes every timeline complete from creation.
+
+## Archive before permanent delete
+
+Normal removal is reversible: active records are archived, can be restored, and are hidden from the default view. Permanent DELETE is allowed only for an already archived record and still requires confirmation. This keeps the MVP simple while protecting users from an accidental destructive click.
+
+## Optimistic concurrency with HTTP preconditions
+
+Every application carries an integer `version`. PATCH, archive, restore, and DELETE require the current value as a quoted `If-Match` header. A successful mutation increments the version; a stale client receives `409 STALE_APPLICATION` instead of silently overwriting newer data. This avoids holding database locks during a user's editing session.
+
+## Contextual statistics
+
+Status totals follow the active/archived lifecycle view and search query, but deliberately ignore the selected status filter. The five cards therefore remain a useful pipeline overview and navigation control instead of collapsing to one non-zero card.
 
 ## Separate test database
 

@@ -11,8 +11,12 @@ const sampleApplication = {
   status: 'interview',
   appliedAt: '2026-08-01',
   notes: null,
+  nextAction: 'Send portfolio link',
+  followUpAt: '2026-08-15',
   createdAt: '2026-08-01 10:00:00.000',
   updatedAt: '2026-08-01 10:00:00.000',
+  archivedAt: null,
+  version: 1,
 };
 
 function response(body, status = 200) {
@@ -43,7 +47,7 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findAllByText('KMS Technology')).not.toHaveLength(0);
-    expect(screen.getByText('1 opportunities in view')).toBeInTheDocument();
+    expect(screen.getByText('1 active application tracked')).toBeInTheDocument();
     expect(screen.getAllByText('Node.js Intern')).not.toHaveLength(0);
     expect(screen.getByRole('status', { name: '' })).toHaveTextContent('1 application found.');
   });
@@ -57,7 +61,7 @@ describe('App', () => {
     });
 
     render(<App />);
-    expect(await screen.findByText('No applications found')).toBeInTheDocument();
+    expect(await screen.findByText('Track your first application')).toBeInTheDocument();
     expect(screen.getByText('0 applications found.')).toBeInTheDocument();
   });
 
@@ -75,7 +79,7 @@ describe('App', () => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Retry applications' }));
-    await waitFor(() => expect(screen.getByText('No applications found')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Track your first application')).toBeInTheDocument());
   });
 
   it('does not let a stale request overwrite newer search results', async () => {

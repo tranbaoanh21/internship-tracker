@@ -10,6 +10,9 @@ const documentedOperations = [
   'GET /applications/{id}',
   'PATCH /applications/{id}',
   'DELETE /applications/{id}',
+  'GET /applications/{id}/history',
+  'POST /applications/{id}/archive',
+  'POST /applications/{id}/restore',
 ];
 
 describe('OpenAPI contract', () => {

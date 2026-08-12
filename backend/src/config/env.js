@@ -12,6 +12,7 @@ function numberFromEnvironment(value, fallback) {
 export function getServerConfig() {
   return {
     port: numberFromEnvironment(process.env.PORT, 3000),
+    applicationTimezone: process.env.APP_TIMEZONE || 'Asia/Ho_Chi_Minh',
   };
 }
 

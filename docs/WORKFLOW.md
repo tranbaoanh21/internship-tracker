@@ -12,6 +12,17 @@ This project is built as vertical slices. Each slice crosses the database, API, 
 6. Run lint, tests, build, and a human-observable demo.
 7. Record decisions and unexpected findings while they are fresh.
 
+For a stateful refinement, keep these changes in one contract-first vertical slice:
+
+```text
+append-only migration
+→ raw-SQL repository and transaction boundary
+→ service/controller/HTTP preconditions
+→ OpenAPI contract and live contract tests
+→ React state, URL state, and lifecycle feedback
+→ component + integration + E2E evidence
+```
+
 ## Choosing the Codex surface
 
 - **Prompt:** one focused change with a short, obvious path.
@@ -29,6 +40,8 @@ This project is built as vertical slices. Each slice crosses the database, API, 
 - Loading, empty, error, success, focus, and pressed states are handled.
 - No credentials, generated output, or local state are committed.
 - Relevant docs and project guidance are updated.
+- Existing data survives migrations and stale writes are rejected explicitly.
+- Desktop and mobile document widths are asserted in E2E, not judged only from a screenshot.
 
 ## Review pattern with subagents
 

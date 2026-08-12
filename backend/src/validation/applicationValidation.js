@@ -1,9 +1,26 @@
-import { APPLICATION_STATUSES, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../constants/application.js';
+import {
+  APPLICATION_ATTENTION_FILTERS,
+  APPLICATION_SORTS,
+  APPLICATION_STATUSES,
+  APPLICATION_VIEWS,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+} from '../constants/application.js';
 import { AppError } from '../errors/AppError.js';
 
-const WRITABLE_FIELDS = ['company', 'position', 'jobUrl', 'status', 'appliedAt', 'notes'];
+const WRITABLE_FIELDS = [
+  'company',
+  'position',
+  'jobUrl',
+  'status',
+  'appliedAt',
+  'notes',
+  'nextAction',
+  'followUpAt',
+];
 const MAX_PAGE = 1_000_000;
 const MAX_UNSIGNED_BIGINT = 18_446_744_073_709_551_615n;
+const MAX_UNSIGNED_INT = 4_294_967_295;
 const MAX_SEARCH_LENGTH = 120;
 
 function isPlainObject(value) {
@@ -108,6 +125,26 @@ export function validateApplicationInput(body, { partial = false } = {}) {
         output.notes = value;
       }
     }
+
+    if (field === 'nextAction') {
+      if (value === undefined || value === null || value === '') {
+        output.nextAction = null;
+      } else if (typeof value !== 'string' || value.length > 240) {
+        fields.nextAction = 'Use 240 characters or fewer.';
+      } else {
+        output.nextAction = value;
+      }
+    }
+
+    if (field === 'followUpAt') {
+      if (value === undefined || value === null || value === '') {
+        output.followUpAt = null;
+      } else if (typeof value !== 'string' || !isValidDate(value)) {
+        fields.followUpAt = 'Use a real date in YYYY-MM-DD format.';
+      } else {
+        output.followUpAt = value;
+      }
+    }
   }
 
   if (!partial) {
@@ -115,6 +152,8 @@ export function validateApplicationInput(body, { partial = false } = {}) {
     if (!Object.hasOwn(output, 'jobUrl')) output.jobUrl = null;
     if (!Object.hasOwn(output, 'appliedAt')) output.appliedAt = null;
     if (!Object.hasOwn(output, 'notes')) output.notes = null;
+    if (!Object.hasOwn(output, 'nextAction')) output.nextAction = null;
+    if (!Object.hasOwn(output, 'followUpAt')) output.followUpAt = null;
   }
 
   if (Object.keys(fields).length > 0) {
@@ -134,6 +173,12 @@ function positiveInteger(value, fallback) {
 export function validateListQuery(query) {
   const q = typeof query.q === 'string' ? query.q.trim() : '';
   const status = typeof query.status === 'string' ? query.status.trim() : '';
+  const attention = typeof query.attention === 'string' ? query.attention.trim() : '';
+  const sort = typeof query.sort === 'string' && query.sort.trim() ? query.sort.trim() : 'updatedAt';
+  const direction = typeof query.direction === 'string' && query.direction.trim()
+    ? query.direction.trim().toLowerCase()
+    : 'desc';
+  const view = typeof query.view === 'string' && query.view.trim() ? query.view.trim() : 'active';
   const page = positiveInteger(query.page, 1);
   const limit = positiveInteger(query.limit, DEFAULT_PAGE_SIZE);
   const fields = {};
@@ -151,12 +196,58 @@ export function validateListQuery(query) {
   if (status && !APPLICATION_STATUSES.includes(status)) {
     fields.status = `Choose one of: ${APPLICATION_STATUSES.join(', ')}.`;
   }
+  if (attention && !APPLICATION_ATTENTION_FILTERS.includes(attention)) {
+    fields.attention = `Choose one of: ${APPLICATION_ATTENTION_FILTERS.join(', ')}.`;
+  }
+  if (!APPLICATION_SORTS.includes(sort)) {
+    fields.sort = `Choose one of: ${APPLICATION_SORTS.join(', ')}.`;
+  }
+  if (!['asc', 'desc'].includes(direction)) {
+    fields.direction = 'Choose asc or desc.';
+  }
+  if (!APPLICATION_VIEWS.includes(view)) {
+    fields.view = `Choose one of: ${APPLICATION_VIEWS.join(', ')}.`;
+  }
 
   if (Object.keys(fields).length > 0) {
     throw new AppError(400, 'VALIDATION_ERROR', 'The query parameters are invalid.', fields);
   }
 
-  return { q, status, page, limit };
+  return { q, status, attention, sort, direction, view, page, limit };
+}
+
+export function validateStatsQuery(query) {
+  const q = typeof query.q === 'string' ? query.q.trim() : '';
+  const view = typeof query.view === 'string' && query.view.trim() ? query.view.trim() : 'active';
+  const fields = {};
+
+  if (q.length > MAX_SEARCH_LENGTH) {
+    fields.q = `Search must use ${MAX_SEARCH_LENGTH} characters or fewer.`;
+  }
+  if (!APPLICATION_VIEWS.includes(view)) {
+    fields.view = `Choose one of: ${APPLICATION_VIEWS.join(', ')}.`;
+  }
+  if (Object.keys(fields).length > 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'The query parameters are invalid.', fields);
+  }
+
+  return { q, view };
+}
+
+export function validateIfMatch(value) {
+  if (value === undefined) {
+    throw new AppError(
+      428,
+      'PRECONDITION_REQUIRED',
+      'Send the current application version in the If-Match header.',
+    );
+  }
+  const match = typeof value === 'string' ? /^"([1-9]\d*)"$/.exec(value.trim()) : null;
+  const version = match ? Number(match[1]) : null;
+  if (!Number.isSafeInteger(version) || version > MAX_UNSIGNED_INT) {
+    throw new AppError(400, 'INVALID_VERSION', 'If-Match must be a quoted positive version.');
+  }
+  return version;
 }
 
 export function validateId(value) {

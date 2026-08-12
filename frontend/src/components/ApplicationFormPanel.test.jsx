@@ -49,6 +49,8 @@ describe('ApplicationFormPanel', () => {
       status: 'wishlist',
       appliedAt: null,
       notes: null,
+      nextAction: null,
+      followUpAt: null,
     });
   });
 
@@ -150,5 +152,46 @@ describe('ApplicationFormPanel', () => {
     const status = screen.getByRole('combobox', { name: 'Status' });
     expect(status).toHaveAttribute('aria-invalid', 'true');
     expect(status).toHaveAccessibleDescription('Choose a supported status.');
+  });
+
+  it('asks before discarding unsaved changes', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <ApplicationFormPanel
+        open
+        application={null}
+        saving={false}
+        serverError={null}
+        onClose={onClose}
+        onSubmit={() => {}}
+      />,
+    );
+
+    await user.type(screen.getByLabelText(/Company/), 'VNG');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('You have unsaved changes.')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('offers to reload after a stale-edit conflict', async () => {
+    const user = userEvent.setup();
+    const onReload = vi.fn();
+    render(
+      <ApplicationFormPanel
+        open
+        application={{ id: 7, company: 'MoMo', position: 'Intern', version: 2 }}
+        saving={false}
+        serverError={{ code: 'STALE_APPLICATION', message: 'The application changed.' }}
+        onClose={() => {}}
+        onReload={onReload}
+        onSubmit={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Reload latest version' }));
+    expect(onReload).toHaveBeenCalledOnce();
   });
 });

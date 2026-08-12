@@ -2,25 +2,14 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Internship Application Tracker API",
-    "version": "1.0.0",
-    "summary": "REST API for tracking internship applications",
-    "description": "Single-user MVP API. JSON fields use camelCase while MySQL columns use snake_case."
+    "version": "1.1.0",
+    "summary": "REST API for managing an internship application pipeline",
+    "description": "Single-user API with follow-up planning, status history, archive/restore, and optimistic concurrency. JSON fields use camelCase while MySQL columns use snake_case."
   },
-  "servers": [
-    {
-      "url": "/api",
-      "description": "Current origin"
-    }
-  ],
+  "servers": [{ "url": "/api", "description": "Current origin" }],
   "tags": [
-    {
-      "name": "Health",
-      "description": "Service readiness"
-    },
-    {
-      "name": "Applications",
-      "description": "Internship application CRUD, search, filtering, and statistics"
-    }
+    { "name": "Health", "description": "Service readiness" },
+    { "name": "Applications", "description": "Application pipeline and lifecycle" }
   ],
   "paths": {
     "/health": {
@@ -29,22 +18,8 @@
         "summary": "Check API and database health",
         "tags": ["Health"],
         "responses": {
-          "200": {
-            "description": "API and database are ready",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthUp" }
-              }
-            }
-          },
-          "503": {
-            "description": "API is running but the database is unavailable",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthDown" }
-              }
-            }
-          }
+          "200": { "description": "API and database are ready", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthUp" } } } },
+          "503": { "description": "API is running but the database is unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthDown" } } } }
         }
       }
     },
@@ -52,53 +27,37 @@
       "get": {
         "operationId": "listApplications",
         "summary": "List applications",
-        "description": "Searches company and position case-insensitively, filters by status, and returns the newest updated records first.",
+        "description": "Searches company and position, combines lifecycle and follow-up filters, and paginates on the server.",
         "tags": ["Applications"],
         "parameters": [
           { "$ref": "#/components/parameters/SearchQuery" },
           { "$ref": "#/components/parameters/StatusQuery" },
+          { "$ref": "#/components/parameters/AttentionQuery" },
+          { "$ref": "#/components/parameters/SortQuery" },
+          { "$ref": "#/components/parameters/DirectionQuery" },
+          { "$ref": "#/components/parameters/ViewQuery" },
           { "$ref": "#/components/parameters/PageQuery" },
           { "$ref": "#/components/parameters/LimitQuery" }
         ],
         "responses": {
-          "200": {
-            "description": "Paginated applications",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ApplicationListResponse" }
-              }
-            }
-          },
+          "200": { "description": "Paginated applications", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationListResponse" } } } },
           "400": { "$ref": "#/components/responses/ValidationError" },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       },
       "post": {
         "operationId": "createApplication",
-        "summary": "Create an application",
+        "summary": "Create an application and its initial status-history entry",
         "tags": ["Applications"],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ApplicationCreateInput" }
-            }
-          }
-        },
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationCreateInput" } } } },
         "responses": {
           "201": {
             "description": "Application created",
             "headers": {
-              "Location": {
-                "description": "Relative URL of the created application",
-                "schema": { "type": "string", "example": "/api/applications/42" }
-              }
+              "Location": { "description": "Relative application URL", "schema": { "type": "string", "example": "/api/applications/42" } },
+              "ETag": { "$ref": "#/components/headers/VersionEtag" }
             },
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ApplicationResponse" }
-              }
-            }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
           },
           "400": { "$ref": "#/components/responses/ValidationError" },
           "413": { "$ref": "#/components/responses/PayloadTooLarge" },
@@ -109,38 +68,31 @@
     "/applications/stats": {
       "get": {
         "operationId": "getApplicationStats",
-        "summary": "Get global application counts by status",
-        "description": "Returns totals across all applications; list search and status filters are not applied.",
+        "summary": "Get contextual counts by status",
+        "description": "Applies search and active/archive view, but deliberately ignores the selected status so every status bucket remains useful.",
         "tags": ["Applications"],
+        "parameters": [
+          { "$ref": "#/components/parameters/SearchQuery" },
+          { "$ref": "#/components/parameters/ViewQuery" }
+        ],
         "responses": {
-          "200": {
-            "description": "All five status buckets and the total",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/StatsResponse" }
-              }
-            }
-          },
+          "200": { "description": "All five status buckets and total", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatsResponse" } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
     },
     "/applications/{id}": {
-      "parameters": [
-        { "$ref": "#/components/parameters/ApplicationId" }
-      ],
+      "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
       "get": {
         "operationId": "getApplication",
-        "summary": "Get one application",
+        "summary": "Get one active or archived application",
         "tags": ["Applications"],
         "responses": {
           "200": {
             "description": "Application found",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ApplicationResponse" }
-              }
-            }
+            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
           },
           "400": { "$ref": "#/components/responses/InvalidId" },
           "404": { "$ref": "#/components/responses/NotFound" },
@@ -149,106 +101,138 @@
       },
       "patch": {
         "operationId": "updateApplication",
-        "summary": "Update supplied application fields",
+        "summary": "Update supplied fields on an active application",
+        "description": "Requires the current version through If-Match. A real status change and the application update commit in one transaction.",
         "tags": ["Applications"],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ApplicationPatchInput" }
-            }
-          }
-        },
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationPatchInput" } } } },
         "responses": {
           "200": {
             "description": "Application updated",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ApplicationResponse" }
-              }
-            }
+            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
           },
           "400": { "$ref": "#/components/responses/ValidationError" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
           "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       },
       "delete": {
         "operationId": "deleteApplication",
-        "summary": "Permanently delete an application",
+        "summary": "Permanently delete an archived application",
         "tags": ["Applications"],
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
         "responses": {
-          "204": { "description": "Application deleted" },
+          "204": { "description": "Application and status history deleted" },
           "400": { "$ref": "#/components/responses/InvalidId" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/applications/{id}/history": {
+      "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
+      "get": {
+        "operationId": "getApplicationHistory",
+        "summary": "Get status history newest first",
+        "tags": ["Applications"],
+        "responses": {
+          "200": { "description": "Status history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HistoryResponse" } } } },
+          "400": { "$ref": "#/components/responses/InvalidId" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/applications/{id}/archive": {
+      "parameters": [
+        { "$ref": "#/components/parameters/ApplicationId" },
+        { "$ref": "#/components/parameters/IfMatch" }
+      ],
+      "post": {
+        "operationId": "archiveApplication",
+        "summary": "Archive an active application",
+        "tags": ["Applications"],
+        "responses": {
+          "200": {
+            "description": "Application archived",
+            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/applications/{id}/restore": {
+      "parameters": [
+        { "$ref": "#/components/parameters/ApplicationId" },
+        { "$ref": "#/components/parameters/IfMatch" }
+      ],
+      "post": {
+        "operationId": "restoreApplication",
+        "summary": "Restore an archived application",
+        "tags": ["Applications"],
+        "responses": {
+          "200": {
+            "description": "Application restored",
+            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "428": { "$ref": "#/components/responses/PreconditionRequired" },
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
     }
   },
   "components": {
+    "headers": {
+      "VersionEtag": { "description": "Strong ETag containing the current optimistic-concurrency version", "schema": { "type": "string", "pattern": "^\"[1-9]\\d*\"$", "example": "\"3\"" } }
+    },
     "parameters": {
-      "ApplicationId": {
-        "name": "id",
-        "in": "path",
-        "required": true,
-        "description": "Positive unsigned BIGINT represented as a decimal string",
-        "schema": {
-          "type": "string",
-          "pattern": "^[1-9]\\d*$",
-          "maxLength": 20,
-          "example": "42"
-        }
-      },
-      "SearchQuery": {
-        "name": "q",
-        "in": "query",
-        "description": "Case-insensitive company or position search",
-        "schema": { "type": "string", "maxLength": 120, "default": "" }
-      },
-      "StatusQuery": {
-        "name": "status",
-        "in": "query",
-        "description": "Exact status filter",
-        "schema": {
-          "oneOf": [
-            { "$ref": "#/components/schemas/ApplicationStatus" },
-            { "type": "string", "const": "" }
-          ],
-          "default": ""
-        }
-      },
-      "PageQuery": {
-        "name": "page",
-        "in": "query",
-        "schema": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 1 }
-      },
-      "LimitQuery": {
-        "name": "limit",
-        "in": "query",
-        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
-      }
+      "ApplicationId": { "name": "id", "in": "path", "required": true, "description": "Positive unsigned BIGINT as a decimal string", "schema": { "type": "string", "pattern": "^[1-9]\\d*$", "maxLength": 20, "example": "42" } },
+      "IfMatch": { "name": "If-Match", "in": "header", "required": true, "description": "Quoted application version returned by the previous response", "schema": { "type": "string", "pattern": "^\"[1-9]\\d*\"$", "example": "\"3\"" } },
+      "SearchQuery": { "name": "q", "in": "query", "description": "Case-insensitive company or position search", "schema": { "type": "string", "maxLength": 120, "default": "" } },
+      "StatusQuery": { "name": "status", "in": "query", "description": "Exact status filter", "schema": { "oneOf": [{ "$ref": "#/components/schemas/ApplicationStatus" }, { "type": "string", "const": "" }], "default": "" } },
+      "AttentionQuery": { "name": "attention", "in": "query", "description": "Follow-up date relative to APP_TIMEZONE", "schema": { "type": "string", "enum": ["", "overdue", "today", "next7", "none"], "default": "" } },
+      "SortQuery": { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["updatedAt", "followUpAt", "appliedAt", "company"], "default": "updatedAt" } },
+      "DirectionQuery": { "name": "direction", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" } },
+      "ViewQuery": { "name": "view", "in": "query", "description": "Active records are the default; archived records are a separate recoverable view", "schema": { "type": "string", "enum": ["active", "archived"], "default": "active" } },
+      "PageQuery": { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 1 } },
+      "LimitQuery": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
     },
     "schemas": {
-      "ApplicationStatus": {
-        "type": "string",
-        "enum": ["wishlist", "applied", "interview", "offer", "rejected"]
-      },
+      "ApplicationStatus": { "type": "string", "enum": ["wishlist", "applied", "interview", "offer", "rejected"] },
+      "DatabaseTimestamp": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$", "description": "MySQL TIMESTAMP(3) string in the database session timezone", "example": "2026-08-13 09:28:28.123" },
       "Application": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "company", "position", "jobUrl", "status", "appliedAt", "notes", "createdAt", "updatedAt"],
+        "required": ["id", "company", "position", "jobUrl", "status", "appliedAt", "notes", "nextAction", "followUpAt", "createdAt", "updatedAt", "archivedAt", "version"],
         "properties": {
           "id": { "type": "string", "example": "42" },
           "company": { "type": "string", "maxLength": 120, "example": "VNG Corporation" },
           "position": { "type": "string", "maxLength": 120, "example": "Backend Intern" },
-          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048, "description": "Absolute HTTP or HTTPS URL", "example": "https://career.vng.com.vn" },
+          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048, "description": "Absolute HTTP or HTTPS URL" },
           "status": { "$ref": "#/components/schemas/ApplicationStatus" },
-          "appliedAt": { "type": ["string", "null"], "format": "date", "example": "2026-08-01" },
-          "notes": { "type": ["string", "null"], "maxLength": 5000, "example": "Review Node.js fundamentals." },
-          "createdAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$", "description": "MySQL TIMESTAMP(3) string in the database session timezone", "example": "2026-08-12 09:28:28.123" },
-          "updatedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$", "description": "MySQL TIMESTAMP(3) string in the database session timezone", "example": "2026-08-12 09:30:01.456" }
+          "appliedAt": { "type": ["string", "null"], "format": "date" },
+          "notes": { "type": ["string", "null"], "maxLength": 5000 },
+          "nextAction": { "type": ["string", "null"], "maxLength": 240, "example": "Email the recruiter with a portfolio link." },
+          "followUpAt": { "type": ["string", "null"], "format": "date", "example": "2026-08-20" },
+          "createdAt": { "$ref": "#/components/schemas/DatabaseTimestamp" },
+          "updatedAt": { "$ref": "#/components/schemas/DatabaseTimestamp" },
+          "archivedAt": { "oneOf": [{ "$ref": "#/components/schemas/DatabaseTimestamp" }, { "type": "null" }] },
+          "version": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
         }
       },
       "ApplicationFields": {
@@ -257,33 +241,19 @@
         "properties": {
           "company": { "type": "string", "minLength": 1, "maxLength": 120 },
           "position": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048, "description": "Absolute HTTP or HTTPS URL" },
+          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048 },
           "status": { "$ref": "#/components/schemas/ApplicationStatus" },
           "appliedAt": { "type": ["string", "null"], "format": "date" },
-          "notes": { "type": ["string", "null"], "maxLength": 5000 }
+          "notes": { "type": ["string", "null"], "maxLength": 5000 },
+          "nextAction": { "type": ["string", "null"], "maxLength": 240 },
+          "followUpAt": { "type": ["string", "null"], "format": "date" }
         }
       },
       "ApplicationCreateInput": {
-        "allOf": [
-          { "$ref": "#/components/schemas/ApplicationFields" },
-          { "required": ["company", "position"] }
-        ],
-        "example": {
-          "company": "VNG Corporation",
-          "position": "Backend Intern",
-          "jobUrl": "https://career.vng.com.vn",
-          "status": "applied",
-          "appliedAt": "2026-08-01",
-          "notes": "Review Node.js fundamentals."
-        }
+        "allOf": [{ "$ref": "#/components/schemas/ApplicationFields" }, { "required": ["company", "position"] }],
+        "example": { "company": "VNG Corporation", "position": "Backend Intern", "status": "applied", "nextAction": "Send a portfolio link", "followUpAt": "2026-08-20" }
       },
-      "ApplicationPatchInput": {
-        "allOf": [
-          { "$ref": "#/components/schemas/ApplicationFields" },
-          { "minProperties": 1 }
-        ],
-        "example": { "status": "interview", "notes": "Technical round scheduled." }
-      },
+      "ApplicationPatchInput": { "allOf": [{ "$ref": "#/components/schemas/ApplicationFields" }, { "minProperties": 1 }], "example": { "status": "interview", "nextAction": "Prepare system-design examples" } },
       "Pagination": {
         "type": "object",
         "additionalProperties": false,
@@ -295,21 +265,8 @@
           "totalPages": { "type": "integer", "minimum": 1 }
         }
       },
-      "ApplicationResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["data"],
-        "properties": { "data": { "$ref": "#/components/schemas/Application" } }
-      },
-      "ApplicationListResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["data", "pagination"],
-        "properties": {
-          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Application" } },
-          "pagination": { "$ref": "#/components/schemas/Pagination" }
-        }
-      },
+      "ApplicationResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/Application" } } },
+      "ApplicationListResponse": { "type": "object", "additionalProperties": false, "required": ["data", "pagination"], "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Application" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } },
       "ApplicationStats": {
         "type": "object",
         "additionalProperties": false,
@@ -323,72 +280,33 @@
           "total": { "type": "integer", "minimum": 0 }
         }
       },
-      "StatsResponse": {
+      "StatsResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/ApplicationStats" } } },
+      "StatusHistoryEntry": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["data"],
-        "properties": { "data": { "$ref": "#/components/schemas/ApplicationStats" } }
-      },
-      "ErrorDetail": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["code", "message"],
+        "required": ["id", "applicationId", "fromStatus", "toStatus", "changedAt"],
         "properties": {
-          "code": { "type": "string", "example": "VALIDATION_ERROR" },
-          "message": { "type": "string", "example": "Check the highlighted fields." },
-          "fields": {
-            "type": "object",
-            "additionalProperties": { "type": "string" },
-            "example": { "company": "Company is required." }
-          }
+          "id": { "type": "string" },
+          "applicationId": { "type": "string" },
+          "fromStatus": { "oneOf": [{ "$ref": "#/components/schemas/ApplicationStatus" }, { "type": "null" }] },
+          "toStatus": { "$ref": "#/components/schemas/ApplicationStatus" },
+          "changedAt": { "$ref": "#/components/schemas/DatabaseTimestamp" }
         }
       },
-      "ErrorResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["error"],
-        "properties": { "error": { "$ref": "#/components/schemas/ErrorDetail" } }
-      },
-      "HealthUp": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["status", "database"],
-        "properties": {
-          "status": { "type": "string", "const": "ok" },
-          "database": { "type": "string", "const": "up" }
-        }
-      },
-      "HealthDown": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["status", "database"],
-        "properties": {
-          "status": { "type": "string", "const": "error" },
-          "database": { "type": "string", "const": "down" }
-        }
-      }
+      "HistoryResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/StatusHistoryEntry" } } } },
+      "ErrorDetail": { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "fields": { "type": "object", "additionalProperties": { "type": "string" } } } },
+      "ErrorResponse": { "type": "object", "additionalProperties": false, "required": ["error"], "properties": { "error": { "$ref": "#/components/schemas/ErrorDetail" } } },
+      "HealthUp": { "type": "object", "additionalProperties": false, "required": ["status", "database"], "properties": { "status": { "type": "string", "const": "ok" }, "database": { "type": "string", "const": "up" } } },
+      "HealthDown": { "type": "object", "additionalProperties": false, "required": ["status", "database"], "properties": { "status": { "type": "string", "const": "error" }, "database": { "type": "string", "const": "down" } } }
     },
     "responses": {
-      "ValidationError": {
-        "description": "Request body or query validation failed",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-      },
-      "InvalidId": {
-        "description": "Application id is invalid",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-      },
-      "NotFound": {
-        "description": "Application was not found",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-      },
-      "PayloadTooLarge": {
-        "description": "JSON request body exceeds 32 KB",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-      },
-      "InternalError": {
-        "description": "Unexpected server error",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
-      }
+      "ValidationError": { "description": "Request validation failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "InvalidId": { "description": "Application id or concurrency header is invalid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "NotFound": { "description": "Application not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "Conflict": { "description": "Stale version or invalid lifecycle state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "PreconditionRequired": { "description": "If-Match header is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "PayloadTooLarge": { "description": "JSON request body exceeds 32 KB", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+      "InternalError": { "description": "Unexpected server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
     }
   }
 }

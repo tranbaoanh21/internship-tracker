@@ -18,14 +18,14 @@ export function ConfirmDialog({ application, deleting, error, onCancel, onConfir
           <span className="flex size-10 items-center justify-center rounded-xl bg-rose-50 text-rose-700"><WarningCircle size={22} weight="duotone" /></span>
           <button className="icon-button" onClick={onCancel} disabled={deleting} aria-label="Close delete confirmation"><X size={18} /></button>
         </div>
-        <h2 id="delete-title" className="mt-5 text-xl font-semibold tracking-tight text-stone-950">Delete this application?</h2>
+        <h2 id="delete-title" className="mt-5 text-xl font-semibold tracking-tight text-stone-950">Delete permanently?</h2>
         <p id="delete-description" className="mt-2 text-sm leading-6 text-stone-600">
-          The {application.position} application at {application.company} will be permanently removed.
+          The archived {application.position} application at {application.company}, including its status history, will be permanently removed. This cannot be undone.
         </p>
         {error && <div className="error-banner mt-4" role="alert">{error}</div>}
         <div className="mt-6 flex justify-end gap-3">
-          <button data-autofocus className="secondary-button" onClick={onCancel} disabled={deleting}>Keep application</button>
-          <button className="danger-button" onClick={onConfirm} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete'}</button>
+          <button data-autofocus className="secondary-button" onClick={onCancel} disabled={deleting}>Keep archived</button>
+          <button className="danger-button" onClick={onConfirm} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete permanently'}</button>
         </div>
       </div>
     </div>

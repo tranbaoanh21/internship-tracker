@@ -10,6 +10,8 @@ const EMPTY_FORM = {
   status: 'wishlist',
   appliedAt: '',
   notes: '',
+  nextAction: '',
+  followUpAt: '',
 };
 
 function toFormValue(application) {
@@ -21,6 +23,8 @@ function toFormValue(application) {
     status: application.status || 'wishlist',
     appliedAt: application.appliedAt || '',
     notes: application.notes || '',
+    nextAction: application.nextAction || '',
+    followUpAt: application.followUpAt || '',
   };
 }
 
@@ -36,26 +40,40 @@ function validate(form) {
       fields.jobUrl = 'Enter a valid http or https URL.';
     }
   }
+  if (form.nextAction.trim().length > 240) fields.nextAction = 'Use 240 characters or fewer.';
   return fields;
 }
 
-export function ApplicationFormPanel({ open, application, saving, serverError, onClose, onSubmit }) {
+export function ApplicationFormPanel({ open, application, saving, serverError, onClose, onReload, onSubmit }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [fields, setFields] = useState({});
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const dialogRef = useRef(null);
   const formRef = useRef(null);
   const editing = Boolean(application);
 
-  useModalFocus({ open, containerRef: dialogRef, onClose, closeDisabled: saving });
+  const dirty = JSON.stringify(form) !== JSON.stringify(toFormValue(application));
+
+  useModalFocus({ open, containerRef: dialogRef, onClose: requestClose, closeDisabled: saving });
 
   useEffect(() => {
     if (open) {
       setForm(toFormValue(application));
       setFields({});
+      setConfirmDiscard(false);
     }
   }, [application, open]);
 
   if (!open) return null;
+
+  function requestClose() {
+    if (saving) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  }
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -79,6 +97,8 @@ export function ApplicationFormPanel({ open, application, saving, serverError, o
       status: form.status,
       appliedAt: form.appliedAt || null,
       notes: form.notes.trim() || null,
+      nextAction: form.nextAction.trim() || null,
+      followUpAt: form.followUpAt || null,
     });
     if (result?.fields) {
       setFields(result.fields);
@@ -88,7 +108,7 @@ export function ApplicationFormPanel({ open, application, saving, serverError, o
 
   return (
     <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-40 outline-none" role="dialog" aria-modal="true" aria-labelledby="application-form-title">
-      <button tabIndex={-1} className="absolute inset-0 cursor-default bg-stone-950/25 backdrop-blur-[2px]" aria-label="Close application form" onClick={onClose} />
+      <button tabIndex={-1} className="absolute inset-0 cursor-default bg-stone-950/25 backdrop-blur-[2px]" aria-label="Close application form" onClick={requestClose} />
       <aside className="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col bg-white shadow-[-16px_0_40px_rgba(28,25,23,0.08)]">
         <header className="flex items-start justify-between border-b border-stone-200 px-5 py-5 sm:px-7">
           <div className="min-w-0">
@@ -97,12 +117,19 @@ export function ApplicationFormPanel({ open, application, saving, serverError, o
               {editing ? application.company : 'Add an application'}
             </h2>
           </div>
-          <button className="icon-button" onClick={onClose} disabled={saving} aria-label="Close form"><X size={20} /></button>
+          <button className="icon-button" onClick={requestClose} disabled={saving} aria-label="Close form"><X size={20} /></button>
         </header>
 
         <form ref={formRef} className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit} noValidate>
           <div className="flex-1 space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
-            {serverError?.message && <div className="error-banner" role="alert">{serverError.message}</div>}
+            {serverError?.message && (
+              <div className="error-banner" role="alert">
+                <p>{serverError.message}</p>
+                {serverError.code === 'STALE_APPLICATION' && onReload && (
+                  <button type="button" className="mt-2 font-semibold underline underline-offset-4" onClick={onReload}>Reload latest version</button>
+                )}
+              </div>
+            )}
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Company" name="company" value={form.company} error={fields.company} onChange={updateField} required autoFocus />
               <Field label="Position" name="position" value={form.position} error={fields.position} onChange={updateField} required />
@@ -126,6 +153,10 @@ export function ApplicationFormPanel({ open, application, saving, serverError, o
               </div>
               <Field label="Applied date" name="appliedAt" type="date" value={form.appliedAt} error={fields.appliedAt} onChange={updateField} hint="Optional" />
             </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Next action" name="nextAction" value={form.nextAction} error={fields.nextAction} onChange={updateField} hint="Optional · 240 characters maximum" maxLength={240} />
+              <Field label="Follow-up date" name="followUpAt" type="date" value={form.followUpAt} error={fields.followUpAt} onChange={updateField} hint="Optional" />
+            </div>
             <label className="field-group">
               <span className="field-label">Notes</span>
               <textarea
@@ -137,13 +168,24 @@ export function ApplicationFormPanel({ open, application, saving, serverError, o
                 aria-invalid={Boolean(fields.notes)}
                 aria-describedby={`notes-hint${fields.notes ? ' notes-error' : ''}`}
               />
-              <span id="notes-hint" className="field-hint">Interview prep, follow-up date, or context worth remembering.</span>
+              <span id="notes-hint" className="field-hint">Interview prep or context worth remembering · {form.notes.length}/5000</span>
               {fields.notes && <span id="notes-error" className="field-error">{fields.notes}</span>}
             </label>
           </div>
-          <footer className="flex justify-end gap-3 border-t border-stone-200 px-5 py-4 sm:px-7">
-            <button type="button" className="secondary-button" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Add application'}</button>
+          <footer className="border-t border-stone-200 px-5 py-4 sm:px-7">
+            {confirmDiscard && (
+              <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between" role="alert">
+                <p>You have unsaved changes.</p>
+                <div className="flex gap-2">
+                  <button type="button" className="font-semibold underline underline-offset-4" onClick={() => setConfirmDiscard(false)}>Keep editing</button>
+                  <button type="button" className="font-semibold text-rose-700 underline underline-offset-4" onClick={onClose}>Discard changes</button>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button type="button" className="secondary-button" onClick={requestClose} disabled={saving}>Cancel</button>
+              <button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Add application'}</button>
+            </div>
           </footer>
         </form>
       </aside>
@@ -151,7 +193,7 @@ export function ApplicationFormPanel({ open, application, saving, serverError, o
   );
 }
 
-function Field({ label, name, value, error, hint, required, autoFocus, type = 'text', onChange }) {
+function Field({ label, name, value, error, hint, required, autoFocus, type = 'text', maxLength, onChange }) {
   const errorId = `${name}-error`;
   const hintId = `${name}-hint`;
   const descriptions = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined;
@@ -165,6 +207,7 @@ function Field({ label, name, value, error, hint, required, autoFocus, type = 't
         value={value}
         onChange={onChange}
         required={required}
+        maxLength={maxLength}
         data-autofocus={autoFocus ? '' : undefined}
         aria-invalid={Boolean(error)}
         aria-describedby={descriptions}

@@ -85,11 +85,16 @@ Treat the OpenAPI document as the public API contract: update it together with r
 | GET | `/api/applications` | Search, filter, and paginate |
 | GET | `/api/applications/stats` | Counts for every status |
 | GET | `/api/applications/:id` | Read one application |
+| GET | `/api/applications/:id/history` | Read status history |
 | POST | `/api/applications` | Create an application |
-| PATCH | `/api/applications/:id` | Update supplied fields |
-| DELETE | `/api/applications/:id` | Permanently delete |
+| PATCH | `/api/applications/:id` | Update supplied fields with version protection |
+| POST | `/api/applications/:id/archive` | Archive an active application |
+| POST | `/api/applications/:id/restore` | Restore an archived application |
+| DELETE | `/api/applications/:id` | Permanently delete an archived application |
 
-List query parameters: `q`, `status`, `page`, and `limit` (maximum `100`). API responses use camelCase while MySQL uses snake_case.
+List query parameters: `q`, `status`, `attention`, `sort`, `direction`, `view`, `page`, and `limit` (maximum `100`). Statistics accept `q` and `view`, intentionally ignore the selected status, and therefore describe the visible lifecycle/search context rather than one selected bucket.
+
+Create/edit supports `nextAction` and `followUpAt`. Every mutable record includes a `version`. Send its quoted value through `If-Match` for PATCH, archive, restore, and permanent delete; a stale version returns `409` and a missing precondition returns `428`. API responses use camelCase while MySQL uses snake_case.
 
 ## Container publishing
 

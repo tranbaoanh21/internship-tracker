@@ -49,6 +49,7 @@ services:
       DB_NAME: ${MYSQL_DATABASE:-internship_tracker}
       DB_USER: ${MYSQL_USER:-tracker}
       DB_PASSWORD: ${MYSQL_PASSWORD:-tracker_password}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
     depends_on:
       db:
         condition: service_healthy

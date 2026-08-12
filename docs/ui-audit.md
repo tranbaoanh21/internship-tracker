@@ -48,3 +48,36 @@ The functional baseline already avoids common generic-dashboard problems:
 - Playwright E2E: `chromium` and true Pixel 7 `mobile-chromium`, both passing
 
 The before/after screenshots are generated from the Docker-served application. Browser QA confirmed semantic desktop table/mobile cards, no horizontal overflow at the available responsive viewport, autofocus in the side panel, Escape dismissal, URL synchronization, and no console warnings/errors. Automated dialog tests now cover focus trapping, focus restoration, and saving/deleting transitions; result counts are announced through a polite live region.
+
+## Product refinement audit
+
+A second `scan → diagnose → fix` pass was applied after the CRUD baseline became stable. It deliberately retained the established warm-neutral and emerald visual system while correcting product clarity and frequent-use ergonomics.
+
+### Diagnosed gaps
+
+- Pipeline totals were global but described as though they matched every selected filter.
+- Notes and other context were visible only after entering edit mode.
+- Initial loading and background refetch used the same full skeleton, causing avoidable flicker.
+- Create/edit/archive/restore/delete did not provide clear success feedback.
+- Empty database, empty archive, and no filter matches shared one generic state.
+- The product promised follow-ups but had no next-action or follow-up model.
+- Five mobile metric cards formed an awkward orphaned grid, and row action targets were too small.
+
+### Focused fixes
+
+- Added a read-only detail panel with next action, notes, metadata, and status timeline.
+- Added explicit initial-loading, background-updating, retry, distinct-empty, toast, and undo states.
+- Made statistics describe the current lifecycle/search context and kept status cards useful as filters.
+- Added follow-up attention filters, server-side sorting, and URL persistence.
+- Replaced ordinary deletion with archive/restore and kept permanent deletion behind a destructive confirmation.
+- Converted mobile metrics to a snap-scrolling rail and increased icon action targets to 44px with visible native tooltips.
+- Added optimistic-conflict recovery and unsaved-change confirmation without introducing another routing or state library.
+
+### Refinement verification
+
+- Final evidence: [`docs/ui/refinement-desktop.png`](ui/refinement-desktop.png) and [`docs/ui/refinement-mobile.png`](ui/refinement-mobile.png).
+- Browser-controlled desktop/dashboard/detail inspection with zero console warnings or errors.
+- Browser-controlled responsive inspection; the metric rail scrolls internally while the document itself remains bounded.
+- Playwright asserts document width on both Desktop Chrome and Pixel 7 in addition to testing the full lifecycle.
+- Component tests cover detail presentation, forms, dialogs, stale conflict recovery, and application state transitions.
+- Backend tests cover transactions, history, archive/restore guards, follow-up queries, and version preconditions.

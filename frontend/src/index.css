@@ -99,7 +99,7 @@ button:disabled {
   }
 
   .icon-button {
-    @apply inline-flex size-9 items-center justify-center rounded-lg text-stone-500 transition duration-200 hover:bg-stone-100 hover:text-stone-950 active:scale-[0.96] disabled:pointer-events-none;
+    @apply inline-flex size-11 items-center justify-center rounded-lg text-stone-500 transition duration-200 hover:bg-stone-100 hover:text-stone-950 active:scale-[0.96] disabled:pointer-events-none;
   }
 
   .field-group {
@@ -124,6 +124,10 @@ button:disabled {
 
   .error-banner {
     @apply rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-800;
+  }
+
+  .success-banner {
+    @apply rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900;
   }
 }
 
