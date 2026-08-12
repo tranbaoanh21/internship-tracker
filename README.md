@@ -73,8 +73,14 @@ npm run test:e2e
 
 ## API
 
+Interactive Swagger UI is available at <http://localhost:3000/api/docs> during local development and at <http://localhost:8080/api/docs> through Docker. The machine-readable OpenAPI 3.1 contract is served from `/api/openapi.json` and stored in `backend/openapi.json`.
+
+Treat the OpenAPI document as the public API contract: update it together with routes, validation, response shapes, and tests whenever API behavior changes. The backend contract tests call the real Express routes and validate their JSON responses against this document.
+
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| GET | `/api/docs` | Interactive Swagger UI |
+| GET | `/api/openapi.json` | Machine-readable OpenAPI contract |
 | GET | `/api/health` | API and database health |
 | GET | `/api/applications` | Search, filter, and paginate |
 | GET | `/api/applications/stats` | Counts for every status |

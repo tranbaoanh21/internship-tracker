@@ -1,0 +1,394 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Internship Application Tracker API",
+    "version": "1.0.0",
+    "summary": "REST API for tracking internship applications",
+    "description": "Single-user MVP API. JSON fields use camelCase while MySQL columns use snake_case."
+  },
+  "servers": [
+    {
+      "url": "/api",
+      "description": "Current origin"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Service readiness"
+    },
+    {
+      "name": "Applications",
+      "description": "Internship application CRUD, search, filtering, and statistics"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Check API and database health",
+        "tags": ["Health"],
+        "responses": {
+          "200": {
+            "description": "API and database are ready",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthUp" }
+              }
+            }
+          },
+          "503": {
+            "description": "API is running but the database is unavailable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthDown" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/applications": {
+      "get": {
+        "operationId": "listApplications",
+        "summary": "List applications",
+        "description": "Searches company and position case-insensitively, filters by status, and returns the newest updated records first.",
+        "tags": ["Applications"],
+        "parameters": [
+          { "$ref": "#/components/parameters/SearchQuery" },
+          { "$ref": "#/components/parameters/StatusQuery" },
+          { "$ref": "#/components/parameters/PageQuery" },
+          { "$ref": "#/components/parameters/LimitQuery" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated applications",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApplicationListResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "post": {
+        "operationId": "createApplication",
+        "summary": "Create an application",
+        "tags": ["Applications"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ApplicationCreateInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Application created",
+            "headers": {
+              "Location": {
+                "description": "Relative URL of the created application",
+                "schema": { "type": "string", "example": "/api/applications/42" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApplicationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/applications/stats": {
+      "get": {
+        "operationId": "getApplicationStats",
+        "summary": "Get global application counts by status",
+        "description": "Returns totals across all applications; list search and status filters are not applied.",
+        "tags": ["Applications"],
+        "responses": {
+          "200": {
+            "description": "All five status buckets and the total",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StatsResponse" }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/applications/{id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/ApplicationId" }
+      ],
+      "get": {
+        "operationId": "getApplication",
+        "summary": "Get one application",
+        "tags": ["Applications"],
+        "responses": {
+          "200": {
+            "description": "Application found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApplicationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidId" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "patch": {
+        "operationId": "updateApplication",
+        "summary": "Update supplied application fields",
+        "tags": ["Applications"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ApplicationPatchInput" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Application updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApplicationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "delete": {
+        "operationId": "deleteApplication",
+        "summary": "Permanently delete an application",
+        "tags": ["Applications"],
+        "responses": {
+          "204": { "description": "Application deleted" },
+          "400": { "$ref": "#/components/responses/InvalidId" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "ApplicationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Positive unsigned BIGINT represented as a decimal string",
+        "schema": {
+          "type": "string",
+          "pattern": "^[1-9]\\d*$",
+          "maxLength": 20,
+          "example": "42"
+        }
+      },
+      "SearchQuery": {
+        "name": "q",
+        "in": "query",
+        "description": "Case-insensitive company or position search",
+        "schema": { "type": "string", "maxLength": 120, "default": "" }
+      },
+      "StatusQuery": {
+        "name": "status",
+        "in": "query",
+        "description": "Exact status filter",
+        "schema": {
+          "oneOf": [
+            { "$ref": "#/components/schemas/ApplicationStatus" },
+            { "type": "string", "const": "" }
+          ],
+          "default": ""
+        }
+      },
+      "PageQuery": {
+        "name": "page",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 1 }
+      },
+      "LimitQuery": {
+        "name": "limit",
+        "in": "query",
+        "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+      }
+    },
+    "schemas": {
+      "ApplicationStatus": {
+        "type": "string",
+        "enum": ["wishlist", "applied", "interview", "offer", "rejected"]
+      },
+      "Application": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "company", "position", "jobUrl", "status", "appliedAt", "notes", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string", "example": "42" },
+          "company": { "type": "string", "maxLength": 120, "example": "VNG Corporation" },
+          "position": { "type": "string", "maxLength": 120, "example": "Backend Intern" },
+          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048, "description": "Absolute HTTP or HTTPS URL", "example": "https://career.vng.com.vn" },
+          "status": { "$ref": "#/components/schemas/ApplicationStatus" },
+          "appliedAt": { "type": ["string", "null"], "format": "date", "example": "2026-08-01" },
+          "notes": { "type": ["string", "null"], "maxLength": 5000, "example": "Review Node.js fundamentals." },
+          "createdAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$", "description": "MySQL TIMESTAMP(3) string in the database session timezone", "example": "2026-08-12 09:28:28.123" },
+          "updatedAt": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$", "description": "MySQL TIMESTAMP(3) string in the database session timezone", "example": "2026-08-12 09:30:01.456" }
+        }
+      },
+      "ApplicationFields": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "company": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "position": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048, "description": "Absolute HTTP or HTTPS URL" },
+          "status": { "$ref": "#/components/schemas/ApplicationStatus" },
+          "appliedAt": { "type": ["string", "null"], "format": "date" },
+          "notes": { "type": ["string", "null"], "maxLength": 5000 }
+        }
+      },
+      "ApplicationCreateInput": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ApplicationFields" },
+          { "required": ["company", "position"] }
+        ],
+        "example": {
+          "company": "VNG Corporation",
+          "position": "Backend Intern",
+          "jobUrl": "https://career.vng.com.vn",
+          "status": "applied",
+          "appliedAt": "2026-08-01",
+          "notes": "Review Node.js fundamentals."
+        }
+      },
+      "ApplicationPatchInput": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ApplicationFields" },
+          { "minProperties": 1 }
+        ],
+        "example": { "status": "interview", "notes": "Technical round scheduled." }
+      },
+      "Pagination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["page", "limit", "total", "totalPages"],
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "total": { "type": "integer", "minimum": 0 },
+          "totalPages": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ApplicationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": { "data": { "$ref": "#/components/schemas/Application" } }
+      },
+      "ApplicationListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "pagination"],
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Application" } },
+          "pagination": { "$ref": "#/components/schemas/Pagination" }
+        }
+      },
+      "ApplicationStats": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["wishlist", "applied", "interview", "offer", "rejected", "total"],
+        "properties": {
+          "wishlist": { "type": "integer", "minimum": 0 },
+          "applied": { "type": "integer", "minimum": 0 },
+          "interview": { "type": "integer", "minimum": 0 },
+          "offer": { "type": "integer", "minimum": 0 },
+          "rejected": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "StatsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": { "data": { "$ref": "#/components/schemas/ApplicationStats" } }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "example": "VALIDATION_ERROR" },
+          "message": { "type": "string", "example": "Check the highlighted fields." },
+          "fields": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "example": { "company": "Company is required." }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": { "error": { "$ref": "#/components/schemas/ErrorDetail" } }
+      },
+      "HealthUp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "database"],
+        "properties": {
+          "status": { "type": "string", "const": "ok" },
+          "database": { "type": "string", "const": "up" }
+        }
+      },
+      "HealthDown": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "database"],
+        "properties": {
+          "status": { "type": "string", "const": "error" },
+          "database": { "type": "string", "const": "down" }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Request body or query validation failed",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "InvalidId": {
+        "description": "Application id is invalid",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "NotFound": {
+        "description": "Application was not found",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "PayloadTooLarge": {
+        "description": "JSON request body exceeds 32 KB",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "InternalError": {
+        "description": "Unexpected server error",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { AppError } from '../errors/AppError.js';
 const WRITABLE_FIELDS = ['company', 'position', 'jobUrl', 'status', 'appliedAt', 'notes'];
 const MAX_PAGE = 1_000_000;
 const MAX_UNSIGNED_BIGINT = 18_446_744_073_709_551_615n;
+const MAX_SEARCH_LENGTH = 120;
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -78,7 +79,9 @@ export function validateApplicationInput(body, { partial = false } = {}) {
     }
 
     if (field === 'status') {
-      const normalizedStatus = value ?? (partial ? undefined : 'wishlist');
+      const normalizedStatus = Object.hasOwn(body, field)
+        ? value
+        : (partial ? undefined : 'wishlist');
       if (!APPLICATION_STATUSES.includes(normalizedStatus)) {
         fields.status = `Choose one of: ${APPLICATION_STATUSES.join(', ')}.`;
       } else {
@@ -129,11 +132,15 @@ function positiveInteger(value, fallback) {
 }
 
 export function validateListQuery(query) {
-  const q = typeof query.q === 'string' ? query.q.trim().slice(0, 120) : '';
+  const q = typeof query.q === 'string' ? query.q.trim() : '';
   const status = typeof query.status === 'string' ? query.status.trim() : '';
   const page = positiveInteger(query.page, 1);
   const limit = positiveInteger(query.limit, DEFAULT_PAGE_SIZE);
   const fields = {};
+
+  if (q.length > MAX_SEARCH_LENGTH) {
+    fields.q = `Search must use ${MAX_SEARCH_LENGTH} characters or fewer.`;
+  }
 
   if (page === null || page > MAX_PAGE) {
     fields.page = `Page must be a decimal integer from 1 to ${MAX_PAGE}.`;

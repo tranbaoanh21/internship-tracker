@@ -33,6 +33,11 @@ describe('application validation', () => {
     },
   );
 
+  it('rejects an explicit null status instead of silently applying the default', () => {
+    expect(() => validateApplicationInput({ company: 'A', position: 'B', status: null }))
+      .toThrowError(expect.objectContaining({ code: 'VALIDATION_ERROR' }));
+  });
+
   it.each(['1e3', '0x10', '9007199254740992', '1000001'])(
     'rejects unsafe page value %s',
     (page) => {

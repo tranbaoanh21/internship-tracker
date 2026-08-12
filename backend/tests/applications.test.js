@@ -27,6 +27,20 @@ describe('health API', () => {
   });
 });
 
+describe('API documentation', () => {
+  it('serves the OpenAPI contract and Swagger UI', async () => {
+    const contract = await request(app).get('/api/openapi.json');
+    expect(contract.status).toBe(200);
+    expect(contract.body.openapi).toBe('3.1.0');
+    expect(contract.body.paths).toHaveProperty('/applications/{id}');
+
+    const docs = await request(app).get('/api/docs/');
+    expect(docs.status).toBe(200);
+    expect(docs.type).toMatch(/html/);
+    expect(docs.text).toContain('<title>Internship Tracker API Docs</title>');
+  });
+});
+
 describe('applications API', () => {
   it('creates and reads an application using camelCase JSON', async () => {
     const created = await createApplication();
@@ -162,6 +176,15 @@ describe('applications API', () => {
       limit: expect.any(String),
       status: expect.any(String),
     });
+  });
+
+  it('rejects a search query longer than the documented limit', async () => {
+    const response = await request(app)
+      .get('/api/applications')
+      .query({ q: 'x'.repeat(121) });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.fields.q).toBe('Search must use 120 characters or fewer.');
   });
 
   it.each(['1e3', '0x10', '9007199254740992', '1000001'])(

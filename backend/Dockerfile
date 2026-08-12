@@ -10,6 +10,7 @@ RUN npm ci --omit=dev --workspace backend
 
 COPY backend/src backend/src
 COPY backend/scripts backend/scripts
+COPY backend/openapi.json backend/openapi.json
 COPY database database
 
 RUN chown -R node:node /app

@@ -9,6 +9,7 @@ export function ApplicationToolbar({ query, status, onQueryChange, onStatusChang
         <MagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
         <input
           type="search"
+          maxLength={120}
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Search company or position"

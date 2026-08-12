@@ -16,10 +16,13 @@
   "dependencies": {
     "dotenv": "17.4.2",
     "express": "5.2.1",
-    "mysql2": "3.23.2"
+    "mysql2": "3.23.2",
+    "swagger-ui-express": "5.0.1"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "12.1.0",
     "@eslint/js": "10.0.1",
+    "ajv": "8.20.0",
     "eslint": "10.8.0",
     "globals": "17.9.0",
     "supertest": "7.2.2",
