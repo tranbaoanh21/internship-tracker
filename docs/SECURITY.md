@@ -15,6 +15,7 @@ The application protects owner credentials, session tokens, application data, My
 - Request IDs, structured redacted logs, graceful shutdown and server timeouts.
 - Docker secret files for database/owner passwords; API docs off by default in production.
 - Dependency audit, CodeQL, pinned Actions, image scanning, SBOM and provenance attestations.
+- The final backend image contains production dependencies and Node, but removes npm/corepack package-manager tooling that is needed only during the dependency build stage.
 
 ## Operator responsibilities
 
