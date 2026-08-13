@@ -34,7 +34,7 @@
     "@apidevtools/swagger-parser": "12.1.0",
     "@eslint/js": "10.0.1",
     "ajv": "8.20.0",
-    "eslint": "10.8.0",
+    "eslint": "10.8.1",
     "globals": "17.9.0",
     "supertest": "7.2.2",
     "vitest": "4.1.10"
