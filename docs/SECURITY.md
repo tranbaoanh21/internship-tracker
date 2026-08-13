@@ -24,6 +24,7 @@ The application protects owner credentials, session tokens, application data, My
 - Patch the host and refresh base images/dependencies through reviewed pull requests.
 - Review authentication failures, 5xx rate, disk space, backup age and certificate renewal.
 - Configure GitHub branch rules for `CI / quality-gates` and `CodeQL`, secret scanning and reviewed dependency updates.
+- Dependabot covers npm, GitHub Actions and both Dockerfiles; review pinned MySQL, Redis, Caddy and Prometheus Compose image tags during each release because Dependabot does not parse Compose image references.
 - Disable or protect Swagger in production; never paste production credentials into interactive docs.
 
 ## Known boundary

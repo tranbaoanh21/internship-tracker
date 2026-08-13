@@ -8,10 +8,6 @@ updates:
       npm-minor-patch:
         update-types: [minor, patch]
   - package-ecosystem: docker
-    directory: /
-    schedule:
-      interval: weekly
-  - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
