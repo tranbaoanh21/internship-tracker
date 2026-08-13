@@ -61,7 +61,7 @@ export function errorHandler(error, req, res, next) {
     return;
   }
 
-  console.error(error);
+  req.log?.error({ err: error }, 'Unhandled request error');
   res.status(500).json({
     error: {
       code: 'INTERNAL_ERROR',

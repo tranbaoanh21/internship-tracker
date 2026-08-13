@@ -1,58 +1,41 @@
 # Project handoff
 
-## Repository and delivery state
+## Current scope
 
-- Git uses the `main` branch and tracks `origin` at <https://github.com/tranbaoanh21/internship-tracker>.
-- GitHub Actions runs quality checks, Playwright E2E, Docker builds, and publishes multi-platform images to GHCR after a successful push to `main`.
-- The project-scoped `redesign-existing-projects` skill is pinned under `.agents/skills/redesign-skill/` and its audit evidence is stored in `docs/ui-audit.md` and `docs/ui/`.
-- The development stack exposes the application at <http://127.0.0.1:8080>; MySQL and backend traffic remain behind the frontend proxy in the release topology.
+The repository is a production-oriented single-owner tracker with authenticated application ownership, CSRF protection, status history, archive/restore, optimistic concurrency, follow-up reminders, durable notifications and SSE updates. Redis/BullMQ handles reminder work; MySQL remains authoritative.
 
-## Quality gates
+## Delivery topology
 
-Use Node 24 from the repository `.nvmrc`, then run:
+- Development: five healthy services—MySQL, Redis, Express, reminder worker and Nginx/React—at <http://127.0.0.1:8080>.
+- Release verification: matched immutable GHCR backend/frontend SHA tags.
+- Production package: release Compose plus Caddy secrets/TLS overlay and optional Prometheus overlay.
+- Git remote: <https://github.com/tranbaoanh21/internship-tracker>.
+
+## Verification commands
 
 ```bash
 nvm use
+docker compose --profile test up -d db-test
 npm run lint
 npm test
 npm run build
+docker compose up --build -d --wait
 npm run test:e2e
+npm run db:restore:drill
 ```
 
-Backend integration tests use the disposable `db-test` MySQL service on host port `3307`. Tests delete only their application fixtures and close the connection pool after the suite.
+Latest local evidence before release: 37 backend integration/contract tests, 34 backend unit tests, 19 frontend component tests and 2 Playwright desktop/mobile flows all passed; npm audit reported zero vulnerabilities. The encrypted restore drill recovered 7 migrations and all 5 preserved development applications. The production-mode release smoke verified the secure `__Host-` cookie, CSRF-authenticated CRUD and disabled production docs.
 
-The OpenAPI 3.1 source of truth is `backend/openapi.json`. Swagger UI is served from `/api/docs/`, the JSON document from `/api/openapi.json`, and runtime contract tests validate real Express responses against the documented schemas.
+Swagger/OpenAPI contains authenticated application and notification operations. Production API docs are disabled by default. Metrics remain internal at backend `/metrics`; Prometheus is available locally on `127.0.0.1:9090` when the monitoring overlay runs.
 
-The application API now has ten documented operations: list/stats/detail/history/create/update/archive/restore/permanent-delete plus health. Mutations use the record `version` through `If-Match`; permanent deletion is available only after archive. Follow-up filters and sorting use `APP_TIMEZONE` so calendar-day behavior is consistent across local, Docker, and CI environments.
+## Data safety
 
-## Local Docker runtime
+- Never edit applied migrations `001`–`007`; add the next numbered migration.
+- Never run test cleanup against a database without `NODE_ENV=test` and an `_test` name.
+- Never use `docker compose down -v` unless deletion is intentional.
+- Archive first; permanent delete only archived records.
+- Back up before migrations and verify the backup by restoring into disposable `db-restore`.
 
-```bash
-docker compose up --build -d
-docker compose ps
-curl --fail http://127.0.0.1:8080/api/health
-curl --fail http://127.0.0.1:8080/api/openapi.json
-docker compose logs --no-color
-docker compose down
-```
+## External production prerequisites
 
-The development database uses host port `3308`. Do not run `docker compose down -v` unless deleting local development data is intentional.
-
-## Release artifacts
-
-Published images:
-
-- `ghcr.io/tranbaoanh21/internship-application-tracker-backend`
-- `ghcr.io/tranbaoanh21/internship-application-tracker-frontend`
-
-Copy `.env.release.example` to the ignored `.env.release` and use the same `sha-<full-commit-sha>` tag for both images. A production deployment must additionally provide access control, TLS, off-site backup, restore verification, monitoring, and rollback evidence; the current Compose release is a learning baseline rather than a complete public production platform.
-
-## Rules for future changes
-
-- Keep API JSON camelCase and MySQL columns snake_case.
-- Update OpenAPI, validation, implementation, and tests in the same vertical slice.
-- Never edit a committed migration; add a numbered migration.
-- Never commit `.env`, credentials, dependencies, build output, Playwright reports, or test artifacts.
-- Preserve backward-compatible database changes so an earlier application image can be used during rollback.
-- Treat archive as the ordinary delete path and reserve permanent deletion for archived records.
-- Keep record mutation, version increment, and status-history insertion inside one transaction.
+Repository completion cannot create a real VPS/domain by itself. The operator must supply DNS, reachable ports 80/443, three secret files, a GHCR-readable Docker login if packages are private, encrypted off-host backup storage and a human alert receiver. Follow `docs/PRODUCTION.md` and record the deployed SHA plus restore/rollback evidence.

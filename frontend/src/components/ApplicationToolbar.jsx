@@ -70,8 +70,8 @@ export function ApplicationToolbar({
         <div className="flex flex-wrap items-center gap-2">
           {hasFilters && <button className="text-sm font-semibold text-stone-600 underline-offset-4 hover:underline" onClick={onClearFilters}>Clear filters</button>}
           <div className="inline-flex rounded-lg border border-stone-300 bg-stone-50 p-1" aria-label="Application view">
-            <button aria-pressed={view === 'active'} className={`inline-flex min-h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold ${view === 'active' ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500'}`} onClick={() => onViewChange('active')}><Tray size={16} /> Active</button>
-            <button aria-pressed={view === 'archived'} className={`inline-flex min-h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold ${view === 'archived' ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500'}`} onClick={() => onViewChange('archived')}><Archive size={16} /> Archived</button>
+            <button aria-pressed={view === 'active'} className={`inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold ${view === 'active' ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500'}`} onClick={() => onViewChange('active')}><Tray size={16} /> Active</button>
+            <button aria-pressed={view === 'archived'} className={`inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold ${view === 'archived' ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500'}`} onClick={() => onViewChange('archived')}><Archive size={16} /> Archived</button>
           </div>
         </div>
       </div>

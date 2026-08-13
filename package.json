@@ -18,7 +18,9 @@
     "db:migrate": "npm run db:migrate -w backend",
     "db:migrate:test": "cross-env NODE_ENV=test DB_PORT=3307 DB_NAME=internship_tracker_test npm run db:migrate -w backend",
     "db:seed": "npm run db:seed -w backend",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:backup": "scripts/backup-db.sh",
+    "db:restore:drill": "scripts/dr-drill.sh"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
@@ -27,5 +29,11 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "allowScripts": {
+    "argon2@0.45.1": true,
+    "@scarf/scarf": false,
+    "msgpackr-extract": false,
+    "fsevents": false
   }
 }

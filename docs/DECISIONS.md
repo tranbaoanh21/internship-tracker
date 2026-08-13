@@ -1,57 +1,44 @@
 # Technical decisions
 
-## Raw SQL and mysql2
+## Product boundary: single owner
 
-The project intentionally avoids an ORM so the learning surface includes schema design, parameterized queries, result mapping, indexes, and migration behavior.
+The first public production target is one owner on one VPS, not a multi-tenant SaaS. There is one bootstrap account, no public registration, and every application query is scoped by `user_id`. A future SaaS conversion would require tenant lifecycle, authorization roles, email verification, password reset, abuse controls, billing and a separate threat model.
 
-## Numbered migrations
+## Server-side cookie sessions
 
-Migration filenames and SHA-256 checksums are stored in `schema_migrations` after successful execution. A MySQL advisory lock serializes runners. MySQL DDL can implicitly commit, so migrations use idempotent recovery where possible and the runner does not promise transactional rollback. Applied migrations are append-only.
+The browser receives an opaque random session ID through an `HttpOnly`, `Secure`, `SameSite=Strict` cookie. Only its SHA-256 hash is stored in MySQL. Passwords use Argon2id. A separate CSRF token protects state-changing requests, login and API rate limits reduce brute-force/abuse, and authentication tokens never enter `localStorage`.
 
-## Status as VARCHAR plus CHECK
+## Raw SQL, migrations and ownership
 
-The database enforces the five MVP statuses without MySQL `ENUM`. This keeps the value constraint visible while allowing a future migration to modify the set more directly.
+The project intentionally uses `mysql2` and parameterized raw SQL to expose schema design, mapping, indexes and transactions. Numbered migrations are checksum-protected, serialized with a MySQL advisory lock and append-only after application. MySQL DDL can implicitly commit, so rollback means restoring a tested backup or running a backward-compatible earlier app image—not editing history.
 
-## Same-origin API in both environments
+## Actionable application model
 
-Vite proxies `/api` during development and Nginx proxies `/api` in the production image. The backend therefore does not need permissive CORS configuration.
+`next_action` and `follow_up_at` turn passive CRUD into a workflow. Status changes and status history are written in one transaction. Archive/restore is the ordinary removal path; permanent deletion is allowed only from the archive. Integer versions plus quoted `If-Match` headers reject stale writes with `409`.
 
-## Bounded database startup retry
+## Redis, BullMQ and SSE—not cache or WebSocket
 
-Compose health dependencies order normal startup, but a manual `docker compose restart` can restart services concurrently. The backend entrypoint retries transient MySQL connection failures for up to one minute before failing, while migration checksum or SQL errors still fail immediately.
+MySQL remains the durable source of truth. A BullMQ worker periodically scans due follow-ups, inserts an idempotent notification in MySQL and publishes a small Redis event. Redis is used for queue coordination and Pub/Sub, not as an unmeasured database cache. SSE is enough for one-way browser notifications and is simpler than WebSocket for this product.
 
-## Server-side URL state
+## Same-origin boundaries
 
-Search, status, attention, sort, lifecycle view, and page live in URL query parameters. A refresh or shared URL retains the current dashboard view without adding React Router.
+Vite proxies `/api` in development; Nginx proxies `/api` and long-lived SSE in containers; Caddy terminates production TLS. This avoids permissive CORS and allows secure host-only cookies. The internal `/metrics` route is not proxied to the public frontend.
 
-## Follow-up as the next product slice
+## Observability
 
-`next_action` and `follow_up_at` make the tracker actionable rather than a passive CRUD list. MySQL performs filtering and sorting so pagination remains correct. The backend computes date boundaries in the configured `APP_TIMEZONE`; clients send and receive calendar dates as `YYYY-MM-DD`.
+Pino emits structured JSON logs with request IDs and redaction. Prometheus scrapes backend process/HTTP metrics and evaluates API-down and high-5xx rules. The repository supplies the rules; a real deployment must connect Alertmanager or another receiver to a human-operated channel.
 
-## Transactional status history
+## Immutable supply chain
 
-Creating or changing an application and recording its status history happen in one database transaction. If either write fails, both are rolled back. No-op edits do not create duplicate history entries, and the initial history row makes every timeline complete from creation.
+Pull requests run reusable quality gates with pinned action commits, dependency auditing, CodeQL and fixable high/critical image scanning. A main/tag publish invokes the same reusable gates once before CD publishes the backend/frontend pair with the same immutable full-SHA tag, multi-architecture manifests, SBOM and provenance attestations. Deployment selects exact SHA tags; `latest` is convenience only.
 
-## Archive before permanent delete
+## Backups and recovery
 
-Normal removal is reversible: active records are archived, can be restored, and are hidden from the default view. Permanent DELETE is allowed only for an already archived record and still requires confirmation. This keeps the MVP simple while protecting users from an accidental destructive click.
+A Docker named volume is durable local storage, not a backup. Production takes encrypted logical dumps, stores checksums and sends copies off-host. The initial operating assumption is RPO 24 hours and RTO 2 hours. A disposable MySQL restore drill verifies application counts and migration metadata without touching production.
 
-## Optimistic concurrency with HTTP preconditions
+## Deliberately deferred
 
-Every application carries an integer `version`. PATCH, archive, restore, and DELETE require the current value as a quoted `If-Match` header. A successful mutation increments the version; a stale client receives `409 STALE_APPLICATION` instead of silently overwriting newer data. This avoids holding database locks during a user's editing session.
-
-## Contextual statistics
-
-Status totals follow the active/archived lifecycle view and search query, but deliberately ignore the selected status filter. The five cards therefore remain a useful pipeline overview and navigation control instead of collapsing to one non-zero card.
-
-## Separate test database
-
-Local integration tests use the disposable `db-test` service on port `3307`. CI exposes its MySQL service on the same port. Tests migrate and clear this database independently of development data.
-
-## GHCR as the CD target
-
-Merges to `main` publish matched multi-platform (`linux/amd64`, `linux/arm64`) images with full immutable SHA tags and a moving `latest` tag. Release Compose requires one shared immutable tag for both images so cached tags and partial matrix publishes cannot create frontend/backend version skew. This demonstrates artifact delivery without pretending that a registry is a running production deployment.
-
-## Independent review gates
-
-Backend correctness, frontend accessibility, and Docker/CI readiness receive separate read-only subagent reviews. The main agent owns all edits. The first full review hardened unsigned BIGINT validation, field-level PATCH errors, modal focus lifecycle, screen-reader result announcements, multi-platform publishing, workflow permissions, immutable release selection, and runtime image contents.
+- Kubernetes and microservices: unnecessary for one VPS/one owner.
+- RabbitMQ: BullMQ already teaches ACK/retry/backoff/idempotency for the reminder use case; running both adds operations without product value.
+- Redis cache: add only after metrics show a MySQL bottleneck.
+- Multi-tenant auth, email delivery and mobile push: separate product slices, not hidden inside hardening.

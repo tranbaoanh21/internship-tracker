@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowClockwise, Briefcase, Sparkle } from '@phosphor-icons/react';
+import { ArrowClockwise, Briefcase, SignOut } from '@phosphor-icons/react';
 import {
   archiveApplication,
   createApplication,
@@ -17,6 +17,7 @@ import { ApplicationList } from './components/ApplicationList.jsx';
 import { ApplicationToolbar } from './components/ApplicationToolbar.jsx';
 import { ConfirmDialog } from './components/ConfirmDialog.jsx';
 import { Pagination } from './components/Pagination.jsx';
+import { NotificationCenter } from './components/NotificationCenter.jsx';
 import { StatusSummary } from './components/StatusSummary.jsx';
 import { ToastRegion } from './components/ToastRegion.jsx';
 import {
@@ -48,7 +49,7 @@ function initialFilters() {
   };
 }
 
-export function App() {
+export function App({ user, onLogout }) {
   const [initial] = useState(initialFilters);
   const [query, setQuery] = useState(initial.query);
   const [status, setStatus] = useState(initial.status);
@@ -334,7 +335,11 @@ export function App() {
               <p className="text-xs text-stone-500">Keep every next step visible</p>
             </div>
           </div>
-          <span className="hidden items-center gap-2 text-sm font-medium text-stone-500 sm:flex"><Sparkle size={16} className="text-emerald-700" /> Portfolio project</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden max-w-52 truncate text-sm font-medium text-stone-500 sm:block">{user?.email}</span>
+            <NotificationCenter onNotification={load} />
+            <button className="secondary-button" onClick={onLogout}><SignOut size={17} /><span className="hidden sm:inline">Sign out</span></button>
+          </div>
         </div>
       </header>
 

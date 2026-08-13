@@ -39,7 +39,7 @@ describe('application repository transaction', () => {
     };
     getPool.mockReturnValue({ getConnection: vi.fn().mockResolvedValue(connection) });
 
-    await expect(updateApplication('1', { status: 'interview' }, 1)).rejects.toThrow(historyFailure);
+    await expect(updateApplication('1', { status: 'interview' }, 1, '7')).rejects.toThrow(historyFailure);
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(connection.commit).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledOnce();

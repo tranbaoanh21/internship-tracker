@@ -12,7 +12,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h127.0.0.1 -u$$MYSQL_USER $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -31,11 +31,25 @@ services:
     tmpfs:
       - /var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot_password --silent"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h127.0.0.1 -u$$MYSQL_USER $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null"]
       interval: 3s
       timeout: 5s
       retries: 30
       start_period: 15s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   backend:
     build:
@@ -43,6 +57,7 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
+      NODE_ENV: development
       PORT: 3000
       DB_HOST: db
       DB_PORT: 3306
@@ -50,8 +65,16 @@ services:
       DB_USER: ${MYSQL_USER:-tracker}
       DB_PASSWORD: ${MYSQL_PASSWORD:-tracker_password}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Ho_Chi_Minh}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      COOKIE_SECURE: "false"
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-change-this-local-password}
+      REDIS_URL: redis://redis:6379
+      API_DOCS_ENABLED: "true"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
@@ -59,6 +82,37 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  reminder-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: ["node", "backend/scripts/reminder-worker.js"]
+    environment:
+      NODE_ENV: development
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-internship_tracker}
+      DB_USER: ${MYSQL_USER:-tracker}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-tracker_password}
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-change-this-local-password}
+      COOKIE_SECURE: "false"
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      backend:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "backend/scripts/worker-healthcheck.js"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 90s
 
   frontend:
     build:
@@ -79,3 +133,4 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:

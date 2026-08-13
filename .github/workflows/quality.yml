@@ -1,0 +1,122 @@
+name: Reusable quality gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root_password
+          MYSQL_DATABASE: internship_tracker_test
+          MYSQL_USER: tracker
+          MYSQL_PASSWORD: tracker_password
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="MYSQL_PWD=tracker_password mysql -h127.0.0.1 -utracker internship_tracker_test -e 'SELECT 1'"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: docker compose up --build -d --wait
+      - run: npm run test:e2e
+      - run: npm run db:restore:drill
+      - if: always()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down -v
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  image-security:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - component: backend
+            dockerfile: backend/Dockerfile
+          - component: frontend
+            dockerfile: frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          load: true
+          tags: internship-tracker-${{ matrix.component }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: internship-tracker-${{ matrix.component }}:ci
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
+
+  operations-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate scripts and Compose topologies
+        env:
+          RELEASE_TAG: sha-validation
+          MYSQL_ROOT_PASSWORD: validation-root-password
+          MYSQL_USER: tracker
+          MYSQL_PASSWORD: validation-database-password
+          OWNER_EMAIL: owner@example.com
+          OWNER_PASSWORD: correct-horse-battery-staple
+          APP_DOMAIN: tracker.example.com
+          ACME_EMAIL: owner@example.com
+          MYSQL_ROOT_PASSWORD_FILE_HOST: /tmp/tracker-secrets/mysql-root
+          MYSQL_PASSWORD_FILE_HOST: /tmp/tracker-secrets/mysql-app
+          OWNER_PASSWORD_FILE_HOST: /tmp/tracker-secrets/owner
+        run: |
+          bash -n scripts/backup-db.sh scripts/restore-db.sh scripts/dr-drill.sh
+          docker compose config --quiet
+          docker compose -f docker-compose.release.yml config --quiet
+          docker compose -f docker-compose.release.yml -f docker-compose.production.yml -f docker-compose.monitoring.yml -f docker-compose.drill.yml config --quiet
+      - name: Validate Caddy HTTPS edge
+        run: docker run --rm -e APP_DOMAIN=tracker.example.com -e ACME_EMAIL=owner@example.com -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile

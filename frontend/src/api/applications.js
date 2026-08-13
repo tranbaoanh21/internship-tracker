@@ -8,13 +8,23 @@ export class ApiError extends Error {
   }
 }
 
+let csrfToken = '';
+
+export function setCsrfToken(value) {
+  csrfToken = value || '';
+}
+
 async function request(path, options = {}) {
   let response;
   try {
     response = await fetch(path, {
       ...options,
+      credentials: 'same-origin',
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(['POST', 'PATCH', 'PUT', 'DELETE'].includes(options.method) && csrfToken
+          ? { 'X-CSRF-Token': csrfToken }
+          : {}),
         ...options.headers,
       },
     });
@@ -35,6 +45,21 @@ async function request(path, options = {}) {
   }
 
   return body;
+}
+
+export function getAuthSession() {
+  return request('/api/auth/session');
+}
+
+export async function login(credentials) {
+  const response = await request('/api/auth/login', { method: 'POST', body: JSON.stringify(credentials) });
+  setCsrfToken(response.data.csrfToken);
+  return response;
+}
+
+export async function logout() {
+  await request('/api/auth/logout', { method: 'POST' });
+  setCsrfToken('');
 }
 
 export function getApplications({
@@ -109,4 +134,23 @@ export function deleteApplication(id, version) {
     method: 'DELETE',
     headers: versionHeader(version),
   });
+}
+
+export function getNotifications() {
+  return request('/api/notifications');
+}
+
+export function markNotificationRead(id) {
+  return request(`/api/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+export function markAllNotificationsRead() {
+  return request('/api/notifications/read-all', { method: 'PATCH' });
+}
+
+export function subscribeToNotifications(onNotification) {
+  if (typeof EventSource === 'undefined') return () => {};
+  const source = new EventSource('/api/notifications/events');
+  source.addEventListener('notification', onNotification);
+  return () => source.close();
 }

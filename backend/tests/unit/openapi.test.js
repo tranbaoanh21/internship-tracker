@@ -4,6 +4,9 @@ import { openApiDocument } from '../../src/routes/docsRoutes.js';
 
 const documentedOperations = [
   'GET /health',
+  'GET /auth/session',
+  'POST /auth/login',
+  'POST /auth/logout',
   'GET /applications',
   'POST /applications',
   'GET /applications/stats',
@@ -13,6 +16,10 @@ const documentedOperations = [
   'GET /applications/{id}/history',
   'POST /applications/{id}/archive',
   'POST /applications/{id}/restore',
+  'GET /notifications',
+  'PATCH /notifications/read-all',
+  'PATCH /notifications/{id}/read',
+  'GET /notifications/events',
 ];
 
 describe('OpenAPI contract', () => {

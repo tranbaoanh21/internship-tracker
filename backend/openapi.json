@@ -2,24 +2,171 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Internship Application Tracker API",
-    "version": "1.1.0",
+    "version": "2.0.0",
     "summary": "REST API for managing an internship application pipeline",
-    "description": "Single-user API with follow-up planning, status history, archive/restore, and optimistic concurrency. JSON fields use camelCase while MySQL columns use snake_case."
+    "description": "Authenticated single-owner API with ownership isolation, follow-up planning, status history, archive/restore, optimistic concurrency, durable reminders, and server-sent notification events. JSON fields use camelCase while MySQL columns use snake_case."
   },
-  "servers": [{ "url": "/api", "description": "Current origin" }],
+  "servers": [
+    {
+      "url": "/api",
+      "description": "Current origin"
+    }
+  ],
   "tags": [
-    { "name": "Health", "description": "Service readiness" },
-    { "name": "Applications", "description": "Application pipeline and lifecycle" }
+    {
+      "name": "Health",
+      "description": "Public readiness endpoint"
+    },
+    {
+      "name": "Authentication",
+      "description": "Server-side owner session lifecycle"
+    },
+    {
+      "name": "Applications",
+      "description": "Owner-scoped application pipeline"
+    },
+    {
+      "name": "Notifications",
+      "description": "Durable follow-up reminders and realtime signals"
+    }
   ],
   "paths": {
     "/health": {
       "get": {
         "operationId": "getHealth",
         "summary": "Check API and database health",
-        "tags": ["Health"],
+        "tags": [
+          "Health"
+        ],
         "responses": {
-          "200": { "description": "API and database are ready", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthUp" } } } },
-          "503": { "description": "API is running but the database is unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthDown" } } } }
+          "200": {
+            "description": "API and database are ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthUp"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "API is running but the database is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDown"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "Read the current owner session",
+        "description": "Returns authenticated false when no valid session exists. Responses are never cached.",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Current session state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Create a server-side owner session",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated session and CSRF token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Delete the current server-side session",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
         }
       }
     },
@@ -28,41 +175,129 @@
         "operationId": "listApplications",
         "summary": "List applications",
         "description": "Searches company and position, combines lifecycle and follow-up filters, and paginates on the server.",
-        "tags": ["Applications"],
+        "tags": [
+          "Applications"
+        ],
         "parameters": [
-          { "$ref": "#/components/parameters/SearchQuery" },
-          { "$ref": "#/components/parameters/StatusQuery" },
-          { "$ref": "#/components/parameters/AttentionQuery" },
-          { "$ref": "#/components/parameters/SortQuery" },
-          { "$ref": "#/components/parameters/DirectionQuery" },
-          { "$ref": "#/components/parameters/ViewQuery" },
-          { "$ref": "#/components/parameters/PageQuery" },
-          { "$ref": "#/components/parameters/LimitQuery" }
+          {
+            "$ref": "#/components/parameters/SearchQuery"
+          },
+          {
+            "$ref": "#/components/parameters/StatusQuery"
+          },
+          {
+            "$ref": "#/components/parameters/AttentionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SortQuery"
+          },
+          {
+            "$ref": "#/components/parameters/DirectionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ViewQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/LimitQuery"
+          }
         ],
         "responses": {
-          "200": { "description": "Paginated applications", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationListResponse" } } } },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "200": {
+            "description": "Paginated applications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       },
       "post": {
         "operationId": "createApplication",
         "summary": "Create an application and its initial status-history entry",
-        "tags": ["Applications"],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationCreateInput" } } } },
+        "tags": [
+          "Applications"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationCreateInput"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Application created",
             "headers": {
-              "Location": { "description": "Relative application URL", "schema": { "type": "string", "example": "/api/applications/42" } },
-              "ETag": { "$ref": "#/components/headers/VersionEtag" }
+              "Location": {
+                "description": "Relative application URL",
+                "schema": {
+                  "type": "string",
+                  "example": "/api/applications/42"
+                }
+              },
+              "ETag": {
+                "$ref": "#/components/headers/VersionEtag"
+              }
             },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
           },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ]
       }
     },
     "/applications/stats": {
@@ -70,243 +305,1450 @@
         "operationId": "getApplicationStats",
         "summary": "Get contextual counts by status",
         "description": "Applies search and active/archive view, but deliberately ignores the selected status so every status bucket remains useful.",
-        "tags": ["Applications"],
+        "tags": [
+          "Applications"
+        ],
         "parameters": [
-          { "$ref": "#/components/parameters/SearchQuery" },
-          { "$ref": "#/components/parameters/ViewQuery" }
+          {
+            "$ref": "#/components/parameters/SearchQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ViewQuery"
+          }
         ],
         "responses": {
-          "200": { "description": "All five status buckets and total", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatsResponse" } } } },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "200": {
+            "description": "All five status buckets and total",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/applications/{id}": {
-      "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ApplicationId"
+        }
+      ],
       "get": {
         "operationId": "getApplication",
         "summary": "Get one active or archived application",
-        "tags": ["Applications"],
+        "tags": [
+          "Applications"
+        ],
         "responses": {
           "200": {
             "description": "Application found",
-            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/VersionEtag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
           },
-          "400": { "$ref": "#/components/responses/InvalidId" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "400": {
+            "$ref": "#/components/responses/InvalidId"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       },
       "patch": {
         "operationId": "updateApplication",
         "summary": "Update supplied fields on an active application",
         "description": "Requires the current version through If-Match. A real status change and the application update commit in one transaction.",
-        "tags": ["Applications"],
-        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationPatchInput" } } } },
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationPatchInput"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Application updated",
-            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/VersionEtag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
           },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
-          "428": { "$ref": "#/components/responses/PreconditionRequired" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ]
       },
       "delete": {
         "operationId": "deleteApplication",
         "summary": "Permanently delete an archived application",
-        "tags": ["Applications"],
-        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "tags": [
+          "Applications"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
         "responses": {
-          "204": { "description": "Application and status history deleted" },
-          "400": { "$ref": "#/components/responses/InvalidId" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "428": { "$ref": "#/components/responses/PreconditionRequired" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "204": {
+            "description": "Application and status history deleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidId"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ]
       }
     },
     "/applications/{id}/history": {
-      "parameters": [{ "$ref": "#/components/parameters/ApplicationId" }],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ApplicationId"
+        }
+      ],
       "get": {
         "operationId": "getApplicationHistory",
         "summary": "Get status history newest first",
-        "tags": ["Applications"],
+        "tags": [
+          "Applications"
+        ],
         "responses": {
-          "200": { "description": "Status history", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HistoryResponse" } } } },
-          "400": { "$ref": "#/components/responses/InvalidId" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "200": {
+            "description": "Status history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidId"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
       }
     },
     "/applications/{id}/archive": {
       "parameters": [
-        { "$ref": "#/components/parameters/ApplicationId" },
-        { "$ref": "#/components/parameters/IfMatch" }
+        {
+          "$ref": "#/components/parameters/ApplicationId"
+        },
+        {
+          "$ref": "#/components/parameters/IfMatch"
+        }
       ],
       "post": {
         "operationId": "archiveApplication",
         "summary": "Archive an active application",
-        "tags": ["Applications"],
+        "tags": [
+          "Applications"
+        ],
         "responses": {
           "200": {
             "description": "Application archived",
-            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/VersionEtag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
           },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "428": { "$ref": "#/components/responses/PreconditionRequired" },
-          "500": { "$ref": "#/components/responses/InternalError" }
-        }
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ]
       }
     },
     "/applications/{id}/restore": {
       "parameters": [
-        { "$ref": "#/components/parameters/ApplicationId" },
-        { "$ref": "#/components/parameters/IfMatch" }
+        {
+          "$ref": "#/components/parameters/ApplicationId"
+        },
+        {
+          "$ref": "#/components/parameters/IfMatch"
+        }
       ],
       "post": {
         "operationId": "restoreApplication",
         "summary": "Restore an archived application",
-        "tags": ["Applications"],
+        "tags": [
+          "Applications"
+        ],
         "responses": {
           "200": {
             "description": "Application restored",
-            "headers": { "ETag": { "$ref": "#/components/headers/VersionEtag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApplicationResponse" } } }
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/VersionEtag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
           },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "409": { "$ref": "#/components/responses/Conflict" },
-          "428": { "$ref": "#/components/responses/PreconditionRequired" },
-          "500": { "$ref": "#/components/responses/InternalError" }
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ]
+      }
+    },
+    "/notifications": {
+      "get": {
+        "operationId": "listNotifications",
+        "summary": "List the latest follow-up notifications",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notifications and unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "patch": {
+        "operationId": "markAllNotificationsRead",
+        "summary": "Mark every owner notification read",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Number of notifications updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkAllReadResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "operationId": "markNotificationRead",
+        "summary": "Mark one owner notification read",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9]\\d*$",
+              "maxLength": 20
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Notification marked read"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidId"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfInvalid"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/notifications/events": {
+      "get": {
+        "operationId": "streamNotifications",
+        "summary": "Stream notification-change signals over SSE",
+        "description": "Long-lived text/event-stream. A notification event tells the client to refetch durable notifications from MySQL.",
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent event stream",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
         }
       }
     }
   },
   "components": {
     "headers": {
-      "VersionEtag": { "description": "Strong ETag containing the current optimistic-concurrency version", "schema": { "type": "string", "pattern": "^\"[1-9]\\d*\"$", "example": "\"3\"" } }
+      "VersionEtag": {
+        "description": "Strong ETag containing the current optimistic-concurrency version",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"[1-9]\\d*\"$",
+          "example": "\"3\""
+        }
+      }
     },
     "parameters": {
-      "ApplicationId": { "name": "id", "in": "path", "required": true, "description": "Positive unsigned BIGINT as a decimal string", "schema": { "type": "string", "pattern": "^[1-9]\\d*$", "maxLength": 20, "example": "42" } },
-      "IfMatch": { "name": "If-Match", "in": "header", "required": true, "description": "Quoted application version returned by the previous response", "schema": { "type": "string", "pattern": "^\"[1-9]\\d*\"$", "example": "\"3\"" } },
-      "SearchQuery": { "name": "q", "in": "query", "description": "Case-insensitive company or position search", "schema": { "type": "string", "maxLength": 120, "default": "" } },
-      "StatusQuery": { "name": "status", "in": "query", "description": "Exact status filter", "schema": { "oneOf": [{ "$ref": "#/components/schemas/ApplicationStatus" }, { "type": "string", "const": "" }], "default": "" } },
-      "AttentionQuery": { "name": "attention", "in": "query", "description": "Follow-up date relative to APP_TIMEZONE", "schema": { "type": "string", "enum": ["", "overdue", "today", "next7", "none"], "default": "" } },
-      "SortQuery": { "name": "sort", "in": "query", "schema": { "type": "string", "enum": ["updatedAt", "followUpAt", "appliedAt", "company"], "default": "updatedAt" } },
-      "DirectionQuery": { "name": "direction", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" } },
-      "ViewQuery": { "name": "view", "in": "query", "description": "Active records are the default; archived records are a separate recoverable view", "schema": { "type": "string", "enum": ["active", "archived"], "default": "active" } },
-      "PageQuery": { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 1 } },
-      "LimitQuery": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+      "ApplicationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Positive unsigned BIGINT as a decimal string",
+        "schema": {
+          "type": "string",
+          "pattern": "^[1-9]\\d*$",
+          "maxLength": 20,
+          "example": "42"
+        }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "description": "Quoted application version returned by the previous response",
+        "schema": {
+          "type": "string",
+          "pattern": "^\"[1-9]\\d*\"$",
+          "example": "\"3\""
+        }
+      },
+      "SearchQuery": {
+        "name": "q",
+        "in": "query",
+        "description": "Case-insensitive company or position search",
+        "schema": {
+          "type": "string",
+          "maxLength": 120,
+          "default": ""
+        }
+      },
+      "StatusQuery": {
+        "name": "status",
+        "in": "query",
+        "description": "Exact status filter",
+        "schema": {
+          "oneOf": [
+            {
+              "$ref": "#/components/schemas/ApplicationStatus"
+            },
+            {
+              "type": "string",
+              "const": ""
+            }
+          ],
+          "default": ""
+        }
+      },
+      "AttentionQuery": {
+        "name": "attention",
+        "in": "query",
+        "description": "Follow-up date relative to APP_TIMEZONE",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "",
+            "overdue",
+            "today",
+            "next7",
+            "none"
+          ],
+          "default": ""
+        }
+      },
+      "SortQuery": {
+        "name": "sort",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "updatedAt",
+            "followUpAt",
+            "appliedAt",
+            "company"
+          ],
+          "default": "updatedAt"
+        }
+      },
+      "DirectionQuery": {
+        "name": "direction",
+        "in": "query",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "desc"
+        }
+      },
+      "ViewQuery": {
+        "name": "view",
+        "in": "query",
+        "description": "Active records are the default; archived records are a separate recoverable view",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "active",
+            "archived"
+          ],
+          "default": "active"
+        }
+      },
+      "PageQuery": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000,
+          "default": 1
+        }
+      },
+      "LimitQuery": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        }
+      }
     },
     "schemas": {
-      "ApplicationStatus": { "type": "string", "enum": ["wishlist", "applied", "interview", "offer", "rejected"] },
-      "DatabaseTimestamp": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$", "description": "MySQL TIMESTAMP(3) string in the database session timezone", "example": "2026-08-13 09:28:28.123" },
+      "ApplicationStatus": {
+        "type": "string",
+        "enum": [
+          "wishlist",
+          "applied",
+          "interview",
+          "offer",
+          "rejected"
+        ]
+      },
+      "DatabaseTimestamp": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}$",
+        "description": "MySQL TIMESTAMP(3) string in the database session timezone",
+        "example": "2026-08-13 09:28:28.123"
+      },
       "Application": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "company", "position", "jobUrl", "status", "appliedAt", "notes", "nextAction", "followUpAt", "createdAt", "updatedAt", "archivedAt", "version"],
+        "required": [
+          "id",
+          "company",
+          "position",
+          "jobUrl",
+          "status",
+          "appliedAt",
+          "notes",
+          "nextAction",
+          "followUpAt",
+          "createdAt",
+          "updatedAt",
+          "archivedAt",
+          "version"
+        ],
         "properties": {
-          "id": { "type": "string", "example": "42" },
-          "company": { "type": "string", "maxLength": 120, "example": "VNG Corporation" },
-          "position": { "type": "string", "maxLength": 120, "example": "Backend Intern" },
-          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048, "description": "Absolute HTTP or HTTPS URL" },
-          "status": { "$ref": "#/components/schemas/ApplicationStatus" },
-          "appliedAt": { "type": ["string", "null"], "format": "date" },
-          "notes": { "type": ["string", "null"], "maxLength": 5000 },
-          "nextAction": { "type": ["string", "null"], "maxLength": 240, "example": "Email the recruiter with a portfolio link." },
-          "followUpAt": { "type": ["string", "null"], "format": "date", "example": "2026-08-20" },
-          "createdAt": { "$ref": "#/components/schemas/DatabaseTimestamp" },
-          "updatedAt": { "$ref": "#/components/schemas/DatabaseTimestamp" },
-          "archivedAt": { "oneOf": [{ "$ref": "#/components/schemas/DatabaseTimestamp" }, { "type": "null" }] },
-          "version": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+          "id": {
+            "type": "string",
+            "example": "42"
+          },
+          "company": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "VNG Corporation"
+          },
+          "position": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Backend Intern"
+          },
+          "jobUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://",
+            "maxLength": 2048,
+            "description": "Absolute HTTP or HTTPS URL"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApplicationStatus"
+          },
+          "appliedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 5000
+          },
+          "nextAction": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 240,
+            "example": "Email the recruiter with a portfolio link."
+          },
+          "followUpAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "example": "2026-08-20"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DatabaseTimestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/DatabaseTimestamp"
+          },
+          "archivedAt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DatabaseTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          }
         }
       },
       "ApplicationFields": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "company": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "position": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "jobUrl": { "type": ["string", "null"], "format": "uri", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://", "maxLength": 2048 },
-          "status": { "$ref": "#/components/schemas/ApplicationStatus" },
-          "appliedAt": { "type": ["string", "null"], "format": "date" },
-          "notes": { "type": ["string", "null"], "maxLength": 5000 },
-          "nextAction": { "type": ["string", "null"], "maxLength": 240 },
-          "followUpAt": { "type": ["string", "null"], "format": "date" }
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "position": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "jobUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://",
+            "maxLength": 2048
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApplicationStatus"
+          },
+          "appliedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 5000
+          },
+          "nextAction": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 240
+          },
+          "followUpAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
         }
       },
       "ApplicationCreateInput": {
-        "allOf": [{ "$ref": "#/components/schemas/ApplicationFields" }, { "required": ["company", "position"] }],
-        "example": { "company": "VNG Corporation", "position": "Backend Intern", "status": "applied", "nextAction": "Send a portfolio link", "followUpAt": "2026-08-20" }
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApplicationFields"
+          },
+          {
+            "required": [
+              "company",
+              "position"
+            ]
+          }
+        ],
+        "example": {
+          "company": "VNG Corporation",
+          "position": "Backend Intern",
+          "status": "applied",
+          "nextAction": "Send a portfolio link",
+          "followUpAt": "2026-08-20"
+        }
       },
-      "ApplicationPatchInput": { "allOf": [{ "$ref": "#/components/schemas/ApplicationFields" }, { "minProperties": 1 }], "example": { "status": "interview", "nextAction": "Prepare system-design examples" } },
+      "ApplicationPatchInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApplicationFields"
+          },
+          {
+            "minProperties": 1
+          }
+        ],
+        "example": {
+          "status": "interview",
+          "nextAction": "Prepare system-design examples"
+        }
+      },
       "Pagination": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["page", "limit", "total", "totalPages"],
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ],
         "properties": {
-          "page": { "type": "integer", "minimum": 1 },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
-          "total": { "type": "integer", "minimum": 0 },
-          "totalPages": { "type": "integer", "minimum": 1 }
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
       },
-      "ApplicationResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/Application" } } },
-      "ApplicationListResponse": { "type": "object", "additionalProperties": false, "required": ["data", "pagination"], "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Application" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } },
+      "ApplicationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Application"
+          }
+        }
+      },
+      "ApplicationListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        }
+      },
       "ApplicationStats": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["wishlist", "applied", "interview", "offer", "rejected", "total"],
+        "required": [
+          "wishlist",
+          "applied",
+          "interview",
+          "offer",
+          "rejected",
+          "total"
+        ],
         "properties": {
-          "wishlist": { "type": "integer", "minimum": 0 },
-          "applied": { "type": "integer", "minimum": 0 },
-          "interview": { "type": "integer", "minimum": 0 },
-          "offer": { "type": "integer", "minimum": 0 },
-          "rejected": { "type": "integer", "minimum": 0 },
-          "total": { "type": "integer", "minimum": 0 }
+          "wishlist": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "applied": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "interview": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offer": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
-      "StatsResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "$ref": "#/components/schemas/ApplicationStats" } } },
+      "StatsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApplicationStats"
+          }
+        }
+      },
       "StatusHistoryEntry": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "applicationId", "fromStatus", "toStatus", "changedAt"],
+        "required": [
+          "id",
+          "applicationId",
+          "fromStatus",
+          "toStatus",
+          "changedAt"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "applicationId": { "type": "string" },
-          "fromStatus": { "oneOf": [{ "$ref": "#/components/schemas/ApplicationStatus" }, { "type": "null" }] },
-          "toStatus": { "$ref": "#/components/schemas/ApplicationStatus" },
-          "changedAt": { "$ref": "#/components/schemas/DatabaseTimestamp" }
+          "id": {
+            "type": "string"
+          },
+          "applicationId": {
+            "type": "string"
+          },
+          "fromStatus": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toStatus": {
+            "$ref": "#/components/schemas/ApplicationStatus"
+          },
+          "changedAt": {
+            "$ref": "#/components/schemas/DatabaseTimestamp"
+          }
         }
       },
-      "HistoryResponse": { "type": "object", "additionalProperties": false, "required": ["data"], "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/StatusHistoryEntry" } } } },
-      "ErrorDetail": { "type": "object", "additionalProperties": false, "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "fields": { "type": "object", "additionalProperties": { "type": "string" } } } },
-      "ErrorResponse": { "type": "object", "additionalProperties": false, "required": ["error"], "properties": { "error": { "$ref": "#/components/schemas/ErrorDetail" } } },
-      "HealthUp": { "type": "object", "additionalProperties": false, "required": ["status", "database"], "properties": { "status": { "type": "string", "const": "ok" }, "database": { "type": "string", "const": "up" } } },
-      "HealthDown": { "type": "object", "additionalProperties": false, "required": ["status", "database"], "properties": { "status": { "type": "string", "const": "error" }, "database": { "type": "string", "const": "down" } } }
+      "HistoryResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusHistoryEntry"
+            }
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        }
+      },
+      "HealthUp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "database"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "database": {
+            "type": "string",
+            "const": "up"
+          }
+        }
+      },
+      "HealthDown": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "database"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "error"
+          },
+          "database": {
+            "type": "string",
+            "const": "down"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "role",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9]\\d*$",
+            "maxLength": 20
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "role": {
+            "type": "string",
+            "const": "owner"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DatabaseTimestamp"
+          }
+        }
+      },
+      "LoginInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "writeOnly": true
+          }
+        }
+      },
+      "AuthenticatedSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authenticated",
+          "user",
+          "expiresAt",
+          "csrfToken"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "const": true
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "csrfToken": {
+            "type": "string",
+            "minLength": 43,
+            "maxLength": 43
+          }
+        }
+      },
+      "AnonymousSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authenticated"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AuthenticatedSession"
+              },
+              {
+                "$ref": "#/components/schemas/AnonymousSession"
+              }
+            ]
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "applicationId",
+          "kind",
+          "message",
+          "readAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9]\\d*$",
+            "maxLength": 20
+          },
+          "applicationId": {
+            "type": "string",
+            "pattern": "^[1-9]\\d*$",
+            "maxLength": 20
+          },
+          "kind": {
+            "type": "string",
+            "const": "follow_up_due"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 320
+          },
+          "readAt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DatabaseTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/DatabaseTimestamp"
+          }
+        }
+      },
+      "NotificationListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "unread"
+            ],
+            "properties": {
+              "unread": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "MarkAllReadResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "updated"
+            ],
+            "properties": {
+              "updated": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
     },
     "responses": {
-      "ValidationError": { "description": "Request validation failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-      "InvalidId": { "description": "Application id or concurrency header is invalid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-      "NotFound": { "description": "Application not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-      "Conflict": { "description": "Stale version or invalid lifecycle state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-      "PreconditionRequired": { "description": "If-Match header is required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-      "PayloadTooLarge": { "description": "JSON request body exceeds 32 KB", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
-      "InternalError": { "description": "Unexpected server error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+      "ValidationError": {
+        "description": "Request validation failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "InvalidId": {
+        "description": "Application id or concurrency header is invalid",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Application not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Stale version or invalid lifecycle state",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "PreconditionRequired": {
+        "description": "If-Match header is required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "JSON request body exceeds 32 KB",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "AuthenticationRequired": {
+        "description": "A valid owner session is required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "CsrfInvalid": {
+        "description": "The CSRF token is missing or invalid",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "The client exceeded a request rate limit",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "tracker_session",
+        "description": "Opaque HttpOnly session cookie. Production uses the __Host-tracker_session name."
+      },
+      "csrfHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "Token returned by GET /auth/session or POST /auth/login. Required with the session cookie for state-changing requests."
+      }
     }
   }
 }

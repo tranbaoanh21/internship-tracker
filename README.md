@@ -1,35 +1,50 @@
 # Internship Application Tracker
 
-A learning-focused full-stack portfolio project for tracking internship applications from wishlist to offer.
+A production-oriented learning project for managing internship applications, follow-ups, status history, and reminders.
 
-## Stack
+## Architecture
+
+```text
+Browser
+  -> Caddy (production TLS) -> Nginx (React + /api proxy)
+  -> Express -> MySQL 8.4
+             -> Redis 8 -> BullMQ reminder worker -> SSE notifications
+             -> Prometheus metrics + structured JSON logs
+```
 
 - React 19, Vite, Tailwind CSS v4
-- Node.js 24, Express, mysql2, raw SQL
-- MySQL 8.4
+- Node.js 24, Express 5, `mysql2`, raw SQL
+- MySQL 8.4, Redis 8, BullMQ
 - Vitest, Testing Library, Supertest, Playwright
-- Docker Compose, Nginx, GitHub Actions, GHCR
+- Docker Compose, Nginx, Caddy, Prometheus
+- GitHub Actions, GHCR, SBOM, provenance attestations and image scanning
+
+The public deployment target is a secure **single-owner application**, not a multi-tenant SaaS. There is no public registration. Every application is owned and every query is scoped to the bootstrapped owner.
 
 ## Quick start with Docker
 
-Prerequisites: Docker Desktop with Compose v2.
+Prerequisite: Docker Desktop with Compose v2.
 
 ```bash
-docker compose up --build -d
-curl http://localhost:8080/api/health
+docker compose up --build -d --wait
+curl --fail http://127.0.0.1:8080/api/health
 ```
 
-Open <http://localhost:8080>. The backend applies migrations during startup. Add sample data with:
+Open <http://127.0.0.1:8080> and sign in with the local-only defaults:
+
+```text
+owner@example.com
+change-this-local-password
+```
+
+Override them through `OWNER_EMAIL` and `OWNER_PASSWORD`. Never reuse these defaults outside local development. The backend applies append-only migrations and bootstraps the owner during startup.
 
 ```bash
 docker compose exec backend node backend/scripts/seed.js
+docker compose down                 # preserves MySQL and Redis volumes
 ```
 
-Stop containers without deleting data:
-
-```bash
-docker compose down
-```
+Do not run `docker compose down -v` unless deleting local data is intentional.
 
 ## Local development
 
@@ -37,89 +52,73 @@ docker compose down
 nvm use
 cp .env.example .env
 npm install
-docker compose up -d db
+docker compose up -d db redis
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
-- Frontend: <http://localhost:5173>
-- API: <http://localhost:3000/api/health>
-- MySQL: `127.0.0.1:3308` (container-internal port remains `3306`)
+- Frontend: <http://127.0.0.1:5173>
+- API: <http://127.0.0.1:3000/api/health>
+- Swagger UI: <http://127.0.0.1:3000/api/docs/>
+- MySQL: `127.0.0.1:3308`
+- Redis: `127.0.0.1:6379`
 
-This repository includes `.nvmrc` for Node `24.19.0`. The machine used during development also had a stale `/usr/local/bin/node` v16 and a broken Homebrew line in `~/.zprofile`; run `nvm use` if `node --version` does not report Node 24.
+Use Node `24.19.0` from `.nvmrc`. Vite proxies `/api` to Express, preserving the same-origin cookie model.
 
-Vite proxies `/api` to Express, so local browser requests stay same-origin from the frontend's perspective.
+## API and authentication
 
-## Tests and quality gates
+The OpenAPI 3.1 source of truth is `backend/openapi.json`. It documents session auth, CSRF, applications, status history, archives, notifications, and SSE. Update contract, validation, implementation and tests together.
 
-Start the disposable test database first:
+- The login response sets an opaque session cookie and returns a CSRF token.
+- Production uses `HttpOnly`, `Secure`, `SameSite=Strict`, `__Host-` cookies.
+- Mutating API calls require `X-CSRF-Token`.
+- Application mutations also require the current quoted `version` in `If-Match`.
+- Passwords are hashed with Argon2id; only a SHA-256 session-token hash is stored.
+- Swagger is disabled by default in production and protected when explicitly enabled.
+
+Main endpoints:
+
+| Area | Endpoints |
+| --- | --- |
+| Health | `GET /api/health` |
+| Auth | `GET /api/auth/session`, `POST /api/auth/login`, `POST /api/auth/logout` |
+| Applications | list, stats, detail, history, create, patch, archive, restore and permanent delete under `/api/applications` |
+| Notifications | list, mark read, mark all read and SSE events under `/api/notifications` |
+| Contract | `/api/docs/`, `/api/openapi.json` when enabled |
+| Metrics | `/metrics` on the internal backend network only |
+
+## Quality gates
 
 ```bash
 docker compose --profile test up -d db-test
 npm run lint
-npm run test:unit
 npm test
 npm run build
-```
-
-For E2E, run the full Docker application and install Chromium once:
-
-```bash
-npx playwright install chromium
-docker compose up --build -d
+docker compose up --build -d --wait
 npm run test:e2e
+npm run db:restore:drill
 ```
 
-## API
+The restore drill automatically adds `docker-compose.drill.yml` and restores into tmpfs. In production, export the release/production `COMPOSE_FILE` and `.env.production` through `COMPOSE_ENV_FILES` first, as shown in the runbook.
 
-Interactive Swagger UI is available at <http://localhost:3000/api/docs> during local development and at <http://localhost:8080/api/docs> through Docker. The machine-readable OpenAPI 3.1 contract is served from `/api/openapi.json` and stored in `backend/openapi.json`.
+CI repeats these gates, audits npm dependencies, scans both images for fixable high/critical vulnerabilities, then publishes only after success.
 
-Treat the OpenAPI document as the public API contract: update it together with routes, validation, response shapes, and tests whenever API behavior changes. The backend contract tests call the real Express routes and validate their JSON responses against this document.
+## Immutable release and production deployment
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/docs` | Interactive Swagger UI |
-| GET | `/api/openapi.json` | Machine-readable OpenAPI contract |
-| GET | `/api/health` | API and database health |
-| GET | `/api/applications` | Search, filter, and paginate |
-| GET | `/api/applications/stats` | Counts for every status |
-| GET | `/api/applications/:id` | Read one application |
-| GET | `/api/applications/:id/history` | Read status history |
-| POST | `/api/applications` | Create an application |
-| PATCH | `/api/applications/:id` | Update supplied fields with version protection |
-| POST | `/api/applications/:id/archive` | Archive an active application |
-| POST | `/api/applications/:id/restore` | Restore an archived application |
-| DELETE | `/api/applications/:id` | Permanently delete an archived application |
-
-List query parameters: `q`, `status`, `attention`, `sort`, `direction`, `view`, `page`, and `limit` (maximum `100`). Statistics accept `q` and `view`, intentionally ignore the selected status, and therefore describe the visible lifecycle/search context rather than one selected bucket.
-
-Create/edit supports `nextAction` and `followUpAt`. Every mutable record includes a `version`. Send its quoted value through `If-Match` for PATCH, archive, restore, and permanent delete; a stale version returns `409` and a missing precondition returns `428`. API responses use camelCase while MySQL uses snake_case.
-
-## Container publishing
-
-Pushes to `main` publish:
+Pushes to `main` publish matching multi-architecture images:
 
 - `ghcr.io/tranbaoanh21/internship-application-tracker-backend`
 - `ghcr.io/tranbaoanh21/internship-application-tracker-frontend`
 
-GHCR publishing is artifact delivery, not a hosted runtime deployment. The frontend image expects a Docker network alias named `backend`; use `docker-compose.release.yml` when running the published pair.
+Use the same immutable `sha-<full-commit-sha>` tag for both. The publish workflow verifies signed provenance, pulls the published pair, boots it, and performs authenticated CRUD.
 
-The publish workflow creates matched `linux/amd64` and `linux/arm64` images. After the first publish, open each package on GitHub and change its visibility to public once. To run one immutable release:
+`docker-compose.release.yml` is for artifact verification. Because production cookies are `Secure`, interactive login must run behind the HTTPS Caddy overlay. Follow [Production runbook](docs/PRODUCTION.md) for a real VPS.
 
-```bash
-cp .env.release.example .env.release
-# Replace every placeholder. Use the same full commit SHA shown by GitHub Actions.
-docker compose --env-file .env.release -f docker-compose.release.yml pull
-docker compose --env-file .env.release -f docker-compose.release.yml up -d
-curl --fail http://127.0.0.1:8080/api/health
-```
+## Operations and learning documents
 
-Both images use the same `sha-<full-commit-sha>` tag, which prevents a cached `latest` tag or a partially published release from mixing frontend and backend versions. Never commit `.env.release`.
-
-## Learning documentation
-
-- [Workflow](docs/WORKFLOW.md)
+- [Production deployment, backup and rollback runbook](docs/PRODUCTION.md)
+- [Security model and checklist](docs/SECURITY.md)
+- [Reusable workflow](docs/WORKFLOW.md)
 - [Technical decisions](docs/DECISIONS.md)
 - [UI redesign audit](docs/ui-audit.md)
-- [Local completion and GitHub handoff](docs/HANDOFF.md)
+- [Current handoff and evidence](docs/HANDOFF.md)

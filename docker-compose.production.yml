@@ -1,0 +1,72 @@
+services:
+  db:
+    environment:
+      MYSQL_ROOT_PASSWORD: !reset null
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_PASSWORD: !reset null
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+    secrets:
+      - mysql_root_password
+      - mysql_password
+
+  backend:
+    environment:
+      TRUST_PROXY_HOPS: "2"
+      DB_PASSWORD: !reset null
+      DB_PASSWORD_FILE: /run/secrets/mysql_password
+      OWNER_PASSWORD: !reset null
+      OWNER_PASSWORD_FILE: /run/secrets/owner_password
+    secrets:
+      - mysql_password
+      - owner_password
+
+  reminder-worker:
+    environment:
+      TRUST_PROXY_HOPS: "2"
+      DB_PASSWORD: !reset null
+      DB_PASSWORD_FILE: /run/secrets/mysql_password
+      OWNER_PASSWORD: !reset null
+      OWNER_PASSWORD_FILE: /run/secrets/owner_password
+    secrets:
+      - mysql_password
+      - owner_password
+
+  frontend:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    cpus: 0.5
+    mem_limit: 128m
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  mysql_root_password:
+    file: ${MYSQL_ROOT_PASSWORD_FILE_HOST:?Set MYSQL_ROOT_PASSWORD_FILE_HOST}
+  mysql_password:
+    file: ${MYSQL_PASSWORD_FILE_HOST:?Set MYSQL_PASSWORD_FILE_HOST}
+  owner_password:
+    file: ${OWNER_PASSWORD_FILE_HOST:?Set OWNER_PASSWORD_FILE_HOST}

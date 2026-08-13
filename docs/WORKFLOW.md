@@ -1,48 +1,50 @@
 # Reusable full-stack workflow
 
-This project is built as vertical slices. Each slice crosses the database, API, UI, and verification surfaces needed to demonstrate user-visible behavior.
-
-## The loop
-
-1. Plan the outcome, public contract, constraints, and evidence before editing.
-2. Add the smallest schema or migration required by the behavior.
-3. Implement repository, service, controller, and route changes in that order.
-4. Connect one UI interaction to the real API.
-5. Add integration and component tests before expanding scope.
-6. Run lint, tests, build, and a human-observable demo.
-7. Record decisions and unexpected findings while they are fresh.
-
-For a stateful refinement, keep these changes in one contract-first vertical slice:
+## Delivery loop
 
 ```text
-append-only migration
-→ raw-SQL repository and transaction boundary
-→ service/controller/HTTP preconditions
-→ OpenAPI contract and live contract tests
-→ React state, URL state, and lifecycle feedback
-→ component + integration + E2E evidence
+Plan contract and evidence
+-> append-only migration
+-> repository transaction
+-> service/controller/routes
+-> OpenAPI + integration tests
+-> UI states + component tests
+-> Docker/runtime/E2E evidence
+-> security/operations review
+-> immutable release + rollback evidence
+-> retrospective
 ```
 
-## Choosing the Codex surface
+Build vertical slices so each milestone leaves the real application usable. Keep camelCase in JSON, snake_case in MySQL, parameterize all input, and update OpenAPI together with behavior.
 
-- **Prompt:** one focused change with a short, obvious path.
-- **Plan:** ambiguity, architecture, interface design, or a risky migration.
-- **Goal:** a measurable outcome that needs repeated test/fix cycles.
-- **Subagents:** independent exploration and review. Prefer read-heavy assignments; keep write ownership separate.
-- **Skill:** a repeatable workflow that deserves instructions, references, or scripts.
-- **MCP:** live data or actions outside the repository.
+## How the Codex mechanisms were used
 
-## Definition of done for a feature
+- **Plan:** locked architecture, interfaces, risks, milestones and evidence before code.
+- **Goal:** held a long measurable outcome across repeated implementation, test, runtime, CI and fix cycles. It is complete only when evidence is green—not when files merely exist.
+- **Subagents:** performed independent read-only backend, accessibility and delivery reviews; the main agent retained edit ownership.
+- **Skill:** `redesign-existing-projects` supplied the `scan -> diagnose -> fix -> compare` UI workflow. Product behavior and accessibility stayed higher priority than decoration.
+- **MCP/browser:** tested the running app, authenticated UI, mobile overflow, console output and control sizes against live state rather than source alone.
 
-- The behavior works through the user interface, not only in an isolated function.
-- API validation and failure behavior are explicit.
-- Tests cover the happy path and material edge cases.
-- Loading, empty, error, success, focus, and pressed states are handled.
-- No credentials, generated output, or local state are committed.
-- Relevant docs and project guidance are updated.
-- Existing data survives migrations and stale writes are rejected explicitly.
-- Desktop and mobile document widths are asserted in E2E, not judged only from a screenshot.
+## Feature definition of done
 
-## Review pattern with subagents
+- Works through UI and real API.
+- Happy path plus meaningful validation, auth, concurrency and database failures are tested.
+- Loading, empty, filtered-empty, updating, success, retry, focus and pressed states exist.
+- Existing data survives migrations; stale writes fail explicitly.
+- OpenAPI and operational docs match reality.
+- No credentials, build output, dependency directories or reports are committed.
+- `npm run lint`, `npm test`, `npm run build` and relevant E2E/runtime gates pass.
 
-Use separate read-only reviews for backend correctness, frontend accessibility, and delivery readiness. The main agent owns synthesis and changes so agents do not overwrite one another.
+## Production definition of done
+
+- Authenticated owner-only CRUD works through HTTPS.
+- Secrets enter through protected files/environment and do not appear in Git/logs.
+- Exact GHCR SHA pair is attested, pulled and smoke-tested.
+- Encrypted off-host backup schedule exists and a restore drill has current evidence.
+- Health, structured logs, metrics and actionable alerts are observable.
+- Previous immutable image pair and rollback instructions are recorded.
+- Domain/DNS, ports 80/443 and human alert receiver are explicitly verified outside the repository.
+
+## Choosing scope
+
+Use a prompt for one focused edit, a Plan for ambiguous architecture, a Goal for long test/fix loops, a Skill for repeatable expert procedure, subagents for isolated review, and MCP for live systems or external state. Do not add infrastructure to demonstrate vocabulary; attach it to a real failure mode or product behavior.

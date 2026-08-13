@@ -10,9 +10,10 @@ import {
 } from '../validation/applicationValidation.js';
 import { todayInApplicationTimezone } from '../utils/date.js';
 
-export async function listApplications(query) {
+export async function listApplications(query, userId) {
   const filters = {
     ...validateListQuery(query),
+    userId,
     today: todayInApplicationTimezone(),
   };
   const result = await repository.listApplications(filters);
@@ -28,37 +29,37 @@ export async function listApplications(query) {
   };
 }
 
-export async function getApplication(idValue) {
+export async function getApplication(idValue, userId) {
   const id = validateId(idValue);
-  const application = await repository.findApplicationById(id);
+  const application = await repository.findApplicationById(id, userId);
   if (!application) {
     throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application was not found.');
   }
   return application;
 }
 
-export async function createApplication(body) {
+export async function createApplication(body, userId) {
   const input = validateApplicationInput(body);
-  return repository.createApplication(input);
+  return repository.createApplication(input, userId);
 }
 
-export async function updateApplication(idValue, body, ifMatch) {
+export async function updateApplication(idValue, body, ifMatch, userId) {
   const id = validateId(idValue);
   const expectedVersion = validateIfMatch(ifMatch);
   const input = validateApplicationInput(body, { partial: true });
-  const result = await repository.updateApplication(id, input, expectedVersion);
+  const result = await repository.updateApplication(id, input, expectedVersion, userId);
   return resolveMutation(result);
 }
 
-export async function deleteApplication(idValue, ifMatch) {
+export async function deleteApplication(idValue, ifMatch, userId) {
   const id = validateId(idValue);
   const expectedVersion = validateIfMatch(ifMatch);
-  const result = await repository.deleteApplication(id, expectedVersion);
+  const result = await repository.deleteApplication(id, expectedVersion, userId);
   resolveMutation(result);
 }
 
-export async function getStats(query) {
-  const filters = validateStatsQuery(query);
+export async function getStats(query, userId) {
+  const filters = { ...validateStatsQuery(query), userId };
   const counts = Object.fromEntries(APPLICATION_STATUSES.map((status) => [status, 0]));
   const rows = await repository.getApplicationStats(filters);
   for (const row of rows) counts[row.status] = row.count;
@@ -69,23 +70,23 @@ export async function getStats(query) {
   };
 }
 
-export async function getHistory(idValue) {
+export async function getHistory(idValue, userId) {
   const id = validateId(idValue);
-  await getApplication(id);
+  await getApplication(id, userId);
   return repository.getApplicationHistory(id);
 }
 
-export async function archiveApplication(idValue, ifMatch) {
+export async function archiveApplication(idValue, ifMatch, userId) {
   const id = validateId(idValue);
   const expectedVersion = validateIfMatch(ifMatch);
-  const result = await repository.setArchived(id, expectedVersion, true);
+  const result = await repository.setArchived(id, expectedVersion, true, userId);
   return resolveMutation(result);
 }
 
-export async function restoreApplication(idValue, ifMatch) {
+export async function restoreApplication(idValue, ifMatch, userId) {
   const id = validateId(idValue);
   const expectedVersion = validateIfMatch(ifMatch);
-  const result = await repository.setArchived(id, expectedVersion, false);
+  const result = await repository.setArchived(id, expectedVersion, false, userId);
   return resolveMutation(result);
 }
 

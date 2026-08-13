@@ -2,6 +2,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runMigrations } from './migrate.js';
+import { validateRuntimeConfig } from '../src/config/env.js';
+import { ensureBootstrapOwner } from '../src/services/authService.js';
 
 const MAX_ATTEMPTS = 30;
 const RETRY_DELAY_MS = 2_000;
@@ -37,6 +39,8 @@ export async function migrateWithRetry({
 
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirectRun) {
+  validateRuntimeConfig();
   await migrateWithRetry();
+  await ensureBootstrapOwner({ required: process.env.NODE_ENV === 'production' });
   await import('../src/server.js');
 }

@@ -1,11 +1,23 @@
 import { expect, test } from '@playwright/test';
 
-test('create, inspect, edit, archive, restore, and permanently delete an application', async ({ page, request }, testInfo) => {
+function waitForList(page, { query, view = 'active' }) {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    if (response.request().method() !== 'GET' || url.pathname !== '/api/applications') return false;
+    return url.searchParams.get('q') === query
+      && (url.searchParams.get('view') || 'active') === view;
+  });
+}
+
+test('sign in, create, inspect, edit, archive, restore, and permanently delete an application', async ({ page }, testInfo) => {
   const company = `Portfolio Labs ${testInfo.project.name} ${Date.now()}`;
   let applicationId;
 
   try {
     await page.goto('/');
+    await page.getByLabel('Email').fill(process.env.E2E_OWNER_EMAIL || 'owner@example.com');
+    await page.getByLabel('Password').fill(process.env.E2E_OWNER_PASSWORD || 'change-this-local-password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByRole('heading', { name: /Turn every application/ })).toBeVisible();
     const documentOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -57,41 +69,50 @@ test('create, inspect, edit, archive, restore, and permanently delete an applica
     await expect(page.getByText(`${company} archived.`)).toBeVisible();
     await expect(visibleEntry).toHaveCount(0);
 
+    const firstArchivedList = waitForList(page, { query: company, view: 'archived' });
     await page.getByRole('button', { name: 'Archived' }).click();
+    expect((await firstArchivedList).ok()).toBeTruthy();
     await expect(visibleEntry).toBeVisible();
     const restoreResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/restore'));
     await visibleEntry.getByRole('button', { name: `Restore ${company} application` }).click();
     await restoreResponse;
     await expect(page.getByText(`${company} restored.`)).toBeVisible();
 
+    const activeList = waitForList(page, { query: company });
     await page.getByRole('button', { name: 'Active' }).click();
+    expect((await activeList).ok()).toBeTruthy();
     await expect(visibleEntry).toBeVisible();
     const secondArchive = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/archive'));
     await visibleEntry.getByRole('button', { name: `Archive ${company} application` }).click();
     await secondArchive;
+    const secondArchivedList = waitForList(page, { query: company, view: 'archived' });
     await page.getByRole('button', { name: 'Archived' }).click();
+    expect((await secondArchivedList).ok()).toBeTruthy();
     await expect(visibleEntry).toBeVisible();
 
     await visibleEntry.getByRole('button', { name: `Delete ${company} permanently` }).click();
     const deleteDialog = page.getByRole('alertdialog');
     const deleteResponse = page.waitForResponse((response) => response.request().method() === 'DELETE');
     await deleteDialog.getByRole('button', { name: 'Delete permanently' }).click();
-    await deleteResponse;
+    expect((await deleteResponse).ok()).toBeTruthy();
     applicationId = undefined;
     await expect(visibleEntry).toHaveCount(0);
   } finally {
     if (applicationId) {
-      const found = await request.get(`/api/applications/${applicationId}`);
+      const browserRequest = page.context().request;
+      const session = await browserRequest.get('/api/auth/session');
+      const csrfToken = session.ok() ? (await session.json()).data.csrfToken : '';
+      const found = await browserRequest.get(`/api/applications/${applicationId}`);
       if (found.ok()) {
         let application = (await found.json()).data;
         if (!application.archivedAt) {
-          const archived = await request.post(`/api/applications/${applicationId}/archive`, {
-            headers: { 'If-Match': `"${application.version}"` },
+          const archived = await browserRequest.post(`/api/applications/${applicationId}/archive`, {
+            headers: { 'If-Match': `"${application.version}"`, 'X-CSRF-Token': csrfToken },
           });
           if (archived.ok()) application = (await archived.json()).data;
         }
-        await request.delete(`/api/applications/${applicationId}`, {
-          headers: { 'If-Match': `"${application.version}"` },
+        await browserRequest.delete(`/api/applications/${applicationId}`, {
+          headers: { 'If-Match': `"${application.version}"`, 'X-CSRF-Token': csrfToken },
         });
       }
     }

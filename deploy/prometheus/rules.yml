@@ -1,0 +1,19 @@
+groups:
+  - name: internship-tracker
+    rules:
+      - alert: InternshipTrackerApiDown
+        expr: up{job="internship-tracker-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Internship Tracker API is unavailable
+          description: Prometheus has failed to scrape the API for at least two minutes.
+      - alert: InternshipTrackerHighErrorRate
+        expr: sum(rate(tracker_http_request_duration_seconds_count{status_code=~"5.."}[5m])) / clamp_min(sum(rate(tracker_http_request_duration_seconds_count[5m])), 0.001) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Internship Tracker has an elevated 5xx rate
+          description: More than five percent of API requests have returned 5xx for ten minutes.

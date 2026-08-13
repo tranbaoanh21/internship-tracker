@@ -54,9 +54,9 @@ function addSearchFilter(clauses, values, q) {
   values.push(pattern, pattern);
 }
 
-function buildFilters({ q, status, attention, view, today }, { includeStatus = true } = {}) {
-  const clauses = [view === 'archived' ? 'archived_at IS NOT NULL' : 'archived_at IS NULL'];
-  const values = [];
+function buildFilters({ q, status, attention, view, today, userId }, { includeStatus = true } = {}) {
+  const clauses = ['user_id = ?', view === 'archived' ? 'archived_at IS NOT NULL' : 'archived_at IS NULL'];
+  const values = [userId];
 
   addSearchFilter(clauses, values, q);
 
@@ -124,31 +124,32 @@ export async function listApplications(filtersInput) {
   };
 }
 
-export async function findApplicationById(id, executor = getPool()) {
+export async function findApplicationById(id, userId, executor = getPool()) {
   const [rows] = await executor.execute(
-    `SELECT ${SELECT_FIELDS} FROM applications WHERE id = ?`,
-    [id],
+    `SELECT ${SELECT_FIELDS} FROM applications WHERE id = ? AND user_id = ?`,
+    [id, userId],
   );
   return mapApplication(rows[0]);
 }
 
-async function findApplicationForUpdate(connection, id) {
+async function findApplicationForUpdate(connection, id, userId) {
   const [rows] = await connection.execute(
-    `SELECT ${SELECT_FIELDS} FROM applications WHERE id = ? FOR UPDATE`,
-    [id],
+    `SELECT ${SELECT_FIELDS} FROM applications WHERE id = ? AND user_id = ? FOR UPDATE`,
+    [id, userId],
   );
   return mapApplication(rows[0]);
 }
 
-export async function createApplication(input) {
+export async function createApplication(input, userId) {
   const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
     const [result] = await connection.execute(
       `INSERT INTO applications (
-         company, position, job_url, status, applied_at, notes, next_action, follow_up_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         user_id, company, position, job_url, status, applied_at, notes, next_action, follow_up_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        userId,
         input.company,
         input.position,
         input.jobUrl,
@@ -164,7 +165,7 @@ export async function createApplication(input) {
        VALUES (?, NULL, ?)`,
       [result.insertId, input.status],
     );
-    const application = await findApplicationById(result.insertId, connection);
+    const application = await findApplicationById(result.insertId, userId, connection);
     await connection.commit();
     return application;
   } catch (error) {
@@ -175,11 +176,11 @@ export async function createApplication(input) {
   }
 }
 
-export async function updateApplication(id, changes, expectedVersion) {
+export async function updateApplication(id, changes, expectedVersion, userId) {
   const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
-    const current = await findApplicationForUpdate(connection, id);
+    const current = await findApplicationForUpdate(connection, id, userId);
     if (!current) {
       await connection.rollback();
       return { kind: 'missing' };
@@ -211,7 +212,7 @@ export async function updateApplication(id, changes, expectedVersion) {
       );
     }
 
-    const application = await findApplicationById(id, connection);
+    const application = await findApplicationById(id, userId, connection);
     await connection.commit();
     return { kind: 'updated', application };
   } catch (error) {
@@ -222,11 +223,11 @@ export async function updateApplication(id, changes, expectedVersion) {
   }
 }
 
-export async function setArchived(id, expectedVersion, archived) {
+export async function setArchived(id, expectedVersion, archived, userId) {
   const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
-    const current = await findApplicationForUpdate(connection, id);
+    const current = await findApplicationForUpdate(connection, id, userId);
     if (!current) {
       await connection.rollback();
       return { kind: 'missing' };
@@ -246,7 +247,7 @@ export async function setArchived(id, expectedVersion, archived) {
        WHERE id = ? AND version = ?`,
       [id, expectedVersion],
     );
-    const application = await findApplicationById(id, connection);
+    const application = await findApplicationById(id, userId, connection);
     await connection.commit();
     return { kind: archived ? 'archived' : 'restored', application };
   } catch (error) {
@@ -257,11 +258,11 @@ export async function setArchived(id, expectedVersion, archived) {
   }
 }
 
-export async function deleteApplication(id, expectedVersion) {
+export async function deleteApplication(id, expectedVersion, userId) {
   const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
-    const current = await findApplicationForUpdate(connection, id);
+    const current = await findApplicationForUpdate(connection, id, userId);
     if (!current) {
       await connection.rollback();
       return { kind: 'missing' };
