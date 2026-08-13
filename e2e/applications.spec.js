@@ -13,7 +13,9 @@ test('create, inspect, edit, archive, restore, and permanently delete an applica
     expect(documentOverflow).toBeLessThanOrEqual(1);
 
     const createResponsePromise = page.waitForResponse((response) => response.url().endsWith('/api/applications') && response.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Add application' }).click();
+    // A clean database also shows an empty-state CTA with the same accessible name.
+    // The first match is the persistent toolbar action on every viewport.
+    await page.getByRole('button', { name: 'Add application' }).first().click();
     const createDialog = page.getByRole('dialog');
     await createDialog.getByLabel(/Company/).fill(company);
     await createDialog.getByLabel(/Position/).fill('Full-stack Intern');
