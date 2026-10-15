@@ -23,8 +23,8 @@
     "db:restore:drill": "scripts/dr-drill.sh"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
-    "concurrently": "10.0.4",
+    "@playwright/test": "1.64.0",
+    "concurrently": "10.0.6",
     "cross-env": "10.1.0"
   },
   "engines": {
